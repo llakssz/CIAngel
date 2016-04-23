@@ -35,7 +35,7 @@ static const u16 top = 0x140;
 static bool bSvcHaxAvailable = true;
 static bool bInstallMode = false;
 
-std::string Upper(std::string s)
+std::string upper(std::string s)
 {
   std::string ups;
   
