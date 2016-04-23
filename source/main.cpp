@@ -510,7 +510,7 @@ int main(int argc, const char* argv[])
                 std::string temp;
                 temp = characters[i]["name"].asString();
 
-                int ld = levenshtein_distance(upper(upper(temp), upper(searchstring));
+                int ld = levenshtein_distance(upper(temp), upper(searchstring));
                 if (ld < 10)
                 {
                     display_item item;
