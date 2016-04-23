@@ -2,7 +2,7 @@
 
 **Place wings.json file in sd:/CIAngel/ - in CIAngel, press L to enter search mode, type name of game, then select the result's number you want**
 
-wings.json file can be found here - https://mega.nz/#!n4onnDQJ!vPkF3HCyWgkRyj-hgpb5vcpX9CE37GaglXZaImPM2gY
+wings.json file can **NOT** be found here, sorry.
 It's early and experiemental at the moment, this will be improved.
 -----------------------------
 

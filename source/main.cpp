@@ -223,7 +223,7 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
     return res;
 }
 
-std::string getInput(HB_Keyboard* sHBKB)
+std::string getInput(HB_Keyboard* sHBKB, bool &bCancelled)
 {
     sHBKB->HBKB_Clean();
     touchPosition touch;
@@ -235,17 +235,45 @@ std::string getInput(HB_Keyboard* sHBKB)
         hidTouchRead(&touch);
         KBState = sHBKB->HBKB_CallKeyboard(touch);
         input = sHBKB->HBKB_CheckKeyboardInput();
-        if (KBState != 4)
+
+        // If the user cancelled the input
+        if (KBState == 3)
+        {
+            bCancelled = true;
+            break;
+        }
+        // Otherwise if the user has entered a key
+        else if (KBState != 4)
         {
             printf("%c[2K\r", 27);
             printf("%s", input.c_str());
         }
-            gfxFlushBuffers();
-            gfxSwapBuffers();
-            gspWaitForVBlank();
     }
     printf("\n");
     return input;
+}
+
+void PrintMenu(bool bClear)
+{
+    if (bClear)
+    {
+        consoleClear();
+    }
+    
+    printf("\n");
+    printf("A - Read data from SD and download CIA\n");
+    printf("X - Type a Key/ID pair and download CIA\n");
+    printf("Y - Dl encTitleKeys.bin from 3ds.nfshost.com\n");
+    printf("B - Generate tickets from encTitleKeys.bin\n");
+    printf("L - Type name and download/install CIA\n");
+
+    // Only print install mode if svchax is available
+    if (bSvcHaxAvailable)
+    {
+        printf("R - Switch to 'Install' mode (EXPERIMENTAL!)\n");
+    }
+
+    printf("START - Exit\n");
 }
 
 std::istream& GetLine(std::istream& is, std::string& t)
@@ -320,6 +348,7 @@ int main(int argc, const char* argv[])
     gfxInitDefault();
     consoleInit(GFX_TOP, NULL);
 
+    /* Sadly svchax crashes too much, so only allow install mode when running as a CIA
     // Trigger svchax so we can install CIAs
     if(argc > 0) {
         svchax_init(true);
@@ -327,6 +356,13 @@ int main(int argc, const char* argv[])
             bSvcHaxAvailable = false;
             printf("Failed to acquire kernel access. Install mode disabled.\n");
         }
+    }
+    */
+    
+    // argc is 0 when running as a CIA, and 1 when running as a 3dsx
+    if (argc > 0)
+    {
+        bSvcHaxAvailable = false;
     }
 
     u32 *soc_sharedmem, soc_sharedmem_size = 0x100000;
@@ -338,25 +374,13 @@ int main(int argc, const char* argv[])
 
     amInit();
     AM_InitializeExternalTitleDatabase(false);
-
-    printf("CIAngel by cearp and Drakia\n\n");
-    printf("A - Read data from SD and download CIA\n");
-    printf("X - Type a Key/ID pair and download CIA\n");
-    printf("Y - Dl encTitleKeys.bin from 3ds.nfshost.com\n");
-    printf("B - Generate tickets from encTitleKeys.bin\n");
-    printf("L - Type name and download/install CIA\n");
-
-    // Only print install mode if svchax is available
-    if (bSvcHaxAvailable)
-    {
-        printf("R - Switch to 'Install' mode (EXPERIMENTAL!)\n");
-    }
-
-    printf("START - Exit\n");
+    printf("CIAngel by cearp and Drakia\n");
+    PrintMenu(false);
     printf("\n");
 
     HB_Keyboard sHBKB;
     touchPosition touch;
+    bool bKBCancelled = false;
 
     while (aptMainLoop())
     {
@@ -374,18 +398,33 @@ int main(int argc, const char* argv[])
             GetLine(input, key);
             DownloadTitle(titleId, key, "/CIAngel");
             
-            printf("Press START to exit.\n\n");
+            PrintMenu(false);
         }
 
         if (keys & KEY_X)
         {
             printf("Please enter a titleID:\n");
-            std::string titleId = getInput(&sHBKB);
+            std::string titleId = getInput(&sHBKB, bKBCancelled);
+            if (bKBCancelled)
+            {
+                bKBCancelled = false;
+                PrintMenu(true);
+                continue;
+            }
+
             printf("Please enter the corresponding encTitleKey:\n");
-            std::string key = getInput(&sHBKB);
+            std::string key = getInput(&sHBKB, bKBCancelled);
+            if (bKBCancelled)
+            {
+                bKBCancelled = false;
+                PrintMenu(true);
+                continue;
+            }
+
             if (titleId.length() == 16 && key.length() == 32)
             {
                 DownloadTitle(titleId, key, "/CIAngel");
+                PrintMenu(false);
             }
             else
             {
@@ -412,6 +451,7 @@ int main(int argc, const char* argv[])
             else
             {
                 printf("Downloaded OK!\n");
+                PrintMenu(false);
             }
         }
 
@@ -440,7 +480,13 @@ int main(int argc, const char* argv[])
         if (keys & KEY_L)
         {
             printf("Please enter text to search for the name:\n");
-            std::string searchstring = getInput(&sHBKB);
+            std::string searchstring = getInput(&sHBKB, bKBCancelled);
+            if (bKBCancelled)
+            {
+                bKBCancelled = false;
+                PrintMenu(true);
+                continue;
+            }
 
             std::vector<display_item> display_output;
             std::ifstream ifs("/CIAngel/wings.json");
@@ -448,7 +494,7 @@ int main(int argc, const char* argv[])
             Json::Value obj;
             reader.parse(ifs, obj);
             const Json::Value& characters = obj; // array of characters
-            for (int i = 0; i < characters.size(); i++){
+            for (unsigned int i = 0; i < characters.size(); i++){
                 std::string temp;
                 temp = characters[i]["name"].asString();
 
@@ -467,13 +513,20 @@ int main(int argc, const char* argv[])
             std::sort(display_output.begin(), display_output.end(), compareByLD);
 
             // print a max of 6 most 'similar' names. if X items, vector size is X (not X-1)
-            int display_amount = 6; 
+            unsigned int display_amount = 6; 
             if ( display_output.size() < display_amount )
             {
                 display_amount = display_output.size();
             }
 
-            for(int i=0; i < display_amount; i++){
+            if (display_amount == 0)
+            {
+                printf("No matching titles found.\n");
+                PrintMenu(false);
+                continue;
+            }
+
+            for(unsigned int i=0; i < display_amount; i++){
                 printf( "%d - %s\n", i+1, characters[display_output[i].index]["name"].asString().c_str() );
                 printf( "    %s - ", characters[display_output[i].index]["region"].asString().c_str() );
                 printf( "%s\n", characters[display_output[i].index]["code"].asString().c_str() );
@@ -481,10 +534,35 @@ int main(int argc, const char* argv[])
 
 
             printf("Please enter number of game to download:\n");
-            std::string selectednumstring = getInput(&sHBKB);
-            
             int selectednum;
-            std::stringstream(selectednumstring) >> selectednum;
+            while (true)
+            {
+                std::string selectednumstring = getInput(&sHBKB, bKBCancelled);
+                if (bKBCancelled)
+                {
+                    break;
+                }
+                
+                std::stringstream iss(selectednumstring);
+                iss >> std::ws >> selectednum >> std::ws;
+
+                // Make sure the number was valid
+                if (!iss.eof())
+                {
+                    printf("Invalid. Please enter number of game to download:\n");
+                    continue;
+                }
+
+                break;
+            }
+
+            if (bKBCancelled)
+            {
+                PrintMenu(true);
+                bKBCancelled = false;
+                continue;
+            }
+
             selectednum--;
 
             std::string selected_titleid = characters[display_output[selectednum].index]["titleid"].asString();
@@ -494,16 +572,7 @@ int main(int argc, const char* argv[])
             printf("OK - %s\n", selected_name.c_str());
 
             DownloadTitle(selected_titleid, selected_enckey, "/CIAngel/" + selected_name);
-            
-            printf("Press START to exit.\n\n");
-
-
-
-
-
-
-
-       
+            PrintMenu(false);
         }
 
         if (keys & KEY_B)
@@ -567,7 +636,7 @@ int main(int argc, const char* argv[])
 
             }
             printf("%d tickets dumped to sd:/CIAngel/tickets/\n", count);
-            printf("Press START to exit.\n\n");
+            PrintMenu(false);
 
         }
 
