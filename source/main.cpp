@@ -5,6 +5,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <cstring>
+#include <cctype>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -34,6 +35,18 @@
 static const u16 top = 0x140;
 static bool bSvcHaxAvailable = true;
 static bool bInstallMode = false;
+
+std::string upper(std::string s)
+{
+  std::string ups;
+  
+  for(int i = 0; i < s.size(); i++)
+  {
+    ups.push_back(std::toupper(s[i]));
+  }
+  
+  return ups;
+}
 
 
 struct display_item {
@@ -498,7 +511,7 @@ int main(int argc, const char* argv[])
                 std::string temp;
                 temp = characters[i]["name"].asString();
 
-                int ld = levenshtein_distance(temp, searchstring);
+                int ld = levenshtein_distance(upper(temp), upper(searchstring));
                 if (ld < 10)
                 {
                     display_item item;
