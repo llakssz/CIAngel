@@ -41,7 +41,7 @@ std::string upper(std::string s)
   
   for(int i = 0; i < s.size(); i++)
   {
-    ups.push_back(s[i].toupper());
+    ups.push_back(std::toupper(s[i]));
   }
   
   return ups;
