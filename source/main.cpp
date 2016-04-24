@@ -452,7 +452,8 @@ int main(int argc, const char* argv[])
                 temp = characters[i]["name"].asString();
 
                 int ld = levenshtein_distance(upper(temp), upper(searchstring));
-                if (ld < 10)
+
+                if (upper(temp).find(upper(searchstring)) != std::string::npos)
                 {
                     display_item item;
                     item.ld = ld;
