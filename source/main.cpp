@@ -490,36 +490,7 @@ int main(int argc, const char* argv[])
             
 
             printf("\nPlease press cooresponding button for game to download. [SEL] to cancel.\n");
-            int selectednum;
-            
-            // while (true)
-            // {
-            //     std::string selectednumstring = getInput(&sHBKB, bKBCancelled);
-            //     if (bKBCancelled)
-            //     {
-            //         break;
-            //     }
-                
-            //     std::stringstream iss(selectednumstring);
-            //     iss >> std::ws >> selectednum >> std::ws;
-
-            //     // Make sure the number was valid
-            //     if (!iss.eof())
-            //     {
-            //         printf("Invalid. Please enter number of game to download:\n");
-            //         continue;
-            //     }
-
-            //     break;
-            // }
-
-            // if (bKBCancelled)
-            // {
-            //     PrintMenu(true);
-            //     bKBCancelled = false;
-            //     continue;
-            // }
-            
+            int selectednum;        
             
             bool selectionmade = false;
             bool btnCancelled = false;
