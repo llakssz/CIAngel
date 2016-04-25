@@ -449,11 +449,26 @@ int main(int argc, const char* argv[])
             const Json::Value& characters = obj; // array of characters
             for (unsigned int i = 0; i < characters.size(); i++){
                 std::string temp;
-                temp = characters[i]["name"].asString();
+                temp = upper(characters[i]["name"].asString());
 
-                int ld = levenshtein_distance(upper(temp), upper(searchstring));
+                std::string uppersearchstring;
+                uppersearchstring = upper(searchstring);
+                
+                int ld = levenshtein_distance(temp, uppersearchstring);
+                bool isValid = false;
+                
+                if (temp.find(uppersearchstring) != std::string::npos)
+                {
+                    ld = ld - 99;
+                    isValid = true;
+                }
 
-                if (upper(temp).find(upper(searchstring)) != std::string::npos)
+                if (ld < 10)
+                {
+                    isValid = true;
+                }
+                
+                if (isValid)
                 {
                     display_item item;
                     item.ld = ld;
