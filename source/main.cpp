@@ -432,7 +432,7 @@ int main(int argc, const char* argv[])
 
         if (keys & KEY_Y)
         {
-            printf("Please enter text to search for the name:\n");
+            printf("\nPlease enter text to search for the name:\n\n");
             std::string searchstring = getInput(&sHBKB, bKBCancelled);
             if (bKBCancelled)
             {
@@ -478,45 +478,80 @@ int main(int argc, const char* argv[])
                 PrintMenu(false);
                 continue;
             }
+            
+            printf("\n");
+            char btn[] = {'A', 'B', 'X', 'Y', 'L', 'R'};
 
             for(unsigned int i=0; i < display_amount; i++){
-                printf( "%d - %s\n", i+1, characters[display_output[i].index]["name"].asString().c_str() );
+                printf( "[%c] %s\n", btn[i], characters[display_output[i].index]["name"].asString().c_str() );
                 printf( "    %s - ", characters[display_output[i].index]["region"].asString().c_str() );
                 printf( "%s\n", characters[display_output[i].index]["code"].asString().c_str() );
             }
+            
 
-
-            printf("Please enter number of game to download:\n");
-            int selectednum;
-            while (true)
+            printf("\nPlease press cooresponding button for game to download. [SEL] to cancel.\n");
+            int selectednum;        
+            
+            bool selectionmade = false;
+            bool btnCancelled = false;
+            while (!selectionmade)
             {
-                std::string selectednumstring = getInput(&sHBKB, bKBCancelled);
-                if (bKBCancelled)
+                hidScanInput();
+                u32 btns = hidKeysDown();
+                if (btns)
                 {
-                    break;
+                    switch (btns)
+                    {
+                    case KEY_SELECT:
+                            selectionmade = true;
+                            btnCancelled = true;
+                            break;
+                    case KEY_R:
+                        if (display_amount == 6) {
+                            selectednum = 5;
+                            selectionmade = true;
+                            break;
+                        }
+                    case KEY_L:
+                        if (display_amount >= 5) {
+                            selectednum = 4;
+                            selectionmade = true;
+                            break;
+                        }
+                    case KEY_Y:
+                        if (display_amount >= 4) {
+                            selectednum = 3;
+                            selectionmade = true;
+                            break;
+                        }
+                    case KEY_X:
+                        if (display_amount >= 3) {
+                            selectednum = 2;
+                            selectionmade = true;
+                            break;
+                        }
+                    case KEY_B:
+                        if (display_amount >= 2) {
+                            selectednum = 1;
+                            selectionmade = true;
+                            break;
+                        }
+                    case KEY_A:
+                        if (display_amount >= 1) {
+                            selectednum = 0;
+                            selectionmade = true;
+                            break;
+                        }
+                    }
                 }
-                
-                std::stringstream iss(selectednumstring);
-                iss >> std::ws >> selectednum >> std::ws;
-
-                // Make sure the number was valid
-                if (!iss.eof())
-                {
-                    printf("Invalid. Please enter number of game to download:\n");
-                    continue;
-                }
-
-                break;
             }
-
-            if (bKBCancelled)
+            if (btnCancelled)
             {
                 PrintMenu(true);
                 bKBCancelled = false;
+                btnCancelled = false;
                 continue;
             }
-
-            selectednum--;
 
             std::string selected_titleid = characters[display_output[selectednum].index]["titleid"].asString();
             std::string selected_enckey = characters[display_output[selectednum].index]["enckey"].asString();
