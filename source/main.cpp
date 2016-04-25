@@ -35,7 +35,7 @@
 static const u16 top = 0x140;
 static bool bSvcHaxAvailable = true;
 static bool bInstallMode = false;
-static std::string regionFilter = "ALL";
+static std::string regionFilter = "none";
 
 std::string upper(std::string s)
 {
@@ -402,7 +402,9 @@ int main(int argc, const char* argv[])
 
         if (keys & KEY_A)
         {
-            if(regionFilter == "ALL") {
+            if(regionFilter == "none") {
+                regionFilter = "ALL";
+            } else if (regionFilter == "ALL") {
                 regionFilter = "EUR";
             } else if (regionFilter == "EUR") {
                 regionFilter = "USA";
@@ -411,10 +413,10 @@ int main(int argc, const char* argv[])
             } else if (regionFilter == "JPN") {
                 regionFilter = "---";
             } else if (regionFilter == "---") {
-                regionFilter = "ALL";
+                regionFilter = "none";
             }
-        PrintMenu(true);
-            printf("Region switched to %s.\n", regionFilter.c_str());
+            PrintMenu(true);
+
         }
         if (keys & KEY_X)
         {
@@ -467,9 +469,8 @@ int main(int argc, const char* argv[])
             const Json::Value& characters = obj; // array of characters
             for (unsigned int i = 0; i < characters.size(); i++){
                 std::string temp;
-                if(regionFilter == "ALL" || characters[i]["region"].asString() == regionFilter) {
-                    temp = characters[i]["name"].asString();
-
+                temp = characters[i]["name"].asString();
+                if(temp.find("-System") == std::string::npos &&  (regionFilter == "none" || characters[i]["region"].asString() == regionFilter)) {
                     int ld = levenshtein_distance(upper(temp), upper(searchstring));
                     if (ld < 10)
                     {
