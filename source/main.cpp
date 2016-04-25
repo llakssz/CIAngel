@@ -35,6 +35,7 @@
 static const u16 top = 0x140;
 static bool bSvcHaxAvailable = true;
 static bool bInstallMode = false;
+static std::string regionFilter = "none";
 
 std::string upper(std::string s)
 {
@@ -276,6 +277,7 @@ void PrintMenu(bool bClear)
     printf("\n");
     printf("X - Type a Key/ID pair and download CIA\n");
     printf("Y - Type name and download/install CIA\n");
+    printf("A - Switch Region Filter : %s\n", regionFilter.c_str());
 
     // Only print install mode if svchax is available
     if (bSvcHaxAvailable)
@@ -398,6 +400,24 @@ int main(int argc, const char* argv[])
 
         u32 keys = hidKeysDown();
 
+        if (keys & KEY_A)
+        {
+            if(regionFilter == "none") {
+                regionFilter = "ALL";
+            } else if (regionFilter == "ALL") {
+                regionFilter = "EUR";
+            } else if (regionFilter == "EUR") {
+                regionFilter = "USA";
+            } else if (regionFilter == "USA") {
+                regionFilter = "JPN";
+            } else if (regionFilter == "JPN") {
+                regionFilter = "---";
+            } else if (regionFilter == "---") {
+                regionFilter = "none";
+            }
+            PrintMenu(true);
+
+        }
         if (keys & KEY_X)
         {
             printf("Please enter a titleID:\n");
@@ -450,16 +470,16 @@ int main(int argc, const char* argv[])
             for (unsigned int i = 0; i < characters.size(); i++){
                 std::string temp;
                 temp = characters[i]["name"].asString();
-
-                int ld = levenshtein_distance(upper(temp), upper(searchstring));
-                if (ld < 10)
-                {
-                    display_item item;
-                    item.ld = ld;
-                    item.index = i;
-                    display_output.push_back(item);
+                if(temp.find("-System") == std::string::npos &&  (regionFilter == "none" || characters[i]["region"].asString() == regionFilter)) {
+                    int ld = levenshtein_distance(upper(temp), upper(searchstring));
+                    if (ld < 10)
+                    {
+                        display_item item;
+                        item.ld = ld;
+                        item.index = i;
+                        display_output.push_back(item);
+                    }
                 }
-
             }
 
             // sort similar names by levenshtein distance
