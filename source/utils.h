@@ -51,6 +51,11 @@ int u32_to_u8(u8 *out_value, u32 in_value, u8 endianness);
 int u64_to_u8(u8 *out_value, u64 in_value, u8 endianness);
 //from ctrtool
 void memdump(FILE* fout, const char* prefix, const u8* data, u32 size);
+// HID related
+u32 wait_key();
+u32 wait_key_specific(const char* msg, u32 key);
+// graphics functions
+void clear_screen(gfxScreen_t screen);
 #ifdef __cplusplus
 }
 #endif

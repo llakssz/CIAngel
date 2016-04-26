@@ -130,7 +130,6 @@ void PrintProgress(u32 nSize, u32 nCurrent)
 
 	// Make sure the screen updates
     gfxFlushBuffers();
-    gfxSwapBuffers();
     gspWaitForVBlank();
 }
 
@@ -462,4 +461,72 @@ void memdump(FILE* fout, const char* prefix, const u8* data, u32 size)
 	}
 }
 
+// HID related
+u32 wait_key()
+{
+    while (true)
+    {
+        hidScanInput();
 
+        u32 keys = hidKeysDown();
+        if (keys > 0)
+        {
+            return keys;
+        }
+        gfxFlushBuffers();
+        gspWaitForVBlank();
+    }
+}
+
+u32 wait_key_specific(const char* message, u32 key)
+{
+	printf(message);
+    while (true)
+    {
+        u32 keys = wait_key();
+        if (keys & key)
+        {
+        	return keys;
+        }
+    }
+}
+
+// Graphics Functions
+void clear_screen(gfxScreen_t screen)
+{
+	u8* buffer1;
+	u8* buffer2 = NULL;
+	u16 width, height;
+	u32 bpp;
+	GSPGPU_FramebufferFormats format = gfxGetScreenFormat(screen);
+
+	if (screen == GFX_TOP)
+	{
+		buffer1 = gfxGetFramebuffer(screen, GFX_LEFT, &width, &height);
+		buffer2 = gfxGetFramebuffer(screen, GFX_RIGHT, &width, &height);
+	} else {
+		buffer1 = gfxGetFramebuffer(screen, GFX_LEFT, &width, &height);
+	}
+
+	switch (format)
+	{
+    case GSP_RGBA8_OES:
+        bpp = 4;
+    case GSP_BGR8_OES:
+        bpp = 3;
+    case GSP_RGB565_OES:
+    case GSP_RGB5_A1_OES:
+    case GSP_RGBA4_OES:
+        bpp = 2;
+    default:
+    	bpp = 3;
+	}
+
+	memset(buffer1, 0, (width * height * bpp));
+	if (buffer2)
+		memset(buffer2, 0, (width * height * bpp));
+
+    gfxFlushBuffers();
+    gfxSwapBuffers();
+    gspWaitForVBlank();
+}

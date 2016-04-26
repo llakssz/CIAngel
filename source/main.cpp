@@ -28,6 +28,7 @@
 #include "utils.h"
 #include "cia.h"
 #include "data.h"
+#include "menu.h"
 
 #include "svchax/svchax.h"
 #include "json/json.h"
@@ -40,14 +41,13 @@ std::string upper(std::string s)
 {
   std::string ups;
   
-  for(int i = 0; i < s.size(); i++)
+  for(unsigned int i = 0; i < s.size(); i++)
   {
     ups.push_back(std::toupper(s[i]));
   }
   
   return ups;
 }
-
 
 struct display_item {
   int ld;
@@ -58,7 +58,6 @@ bool compareByLD(const display_item &a, const display_item &b)
 {
     return a.ld < b.ld;
 }
-
 
 bool FileExists (std::string name){
     struct stat buffer;
@@ -189,6 +188,7 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
     // Make sure the CIA doesn't already exist
     if (!bInstallMode && FileExists(outputDir + "/" + titleId + ".cia"))
     {
+        printf("%s/%s.cia already exists.\n", outputDir.c_str(), titleId.c_str());
         return 0;
     }
 
@@ -261,29 +261,16 @@ std::string getInput(HB_Keyboard* sHBKB, bool &bCancelled)
             printf("%c[2K\r", 27);
             printf("%s", input.c_str());
         }
+
+        // Flush and swap framebuffers
+        gfxFlushBuffers();
+        gfxSwapBuffers();
+
+        //Wait for VBlank
+        gspWaitForVBlank();
     }
     printf("\n");
     return input;
-}
-
-void PrintMenu(bool bClear)
-{
-    if (bClear)
-    {
-        consoleClear();
-    }
-    
-    printf("\n");
-    printf("X - Type a Key/ID pair and download CIA\n");
-    printf("Y - Type name and download/install CIA\n");
-
-    // Only print install mode if svchax is available
-    if (bSvcHaxAvailable)
-    {
-        printf("R - Switch to 'Install' mode (EXPERIMENTAL!)\n");
-    }
-
-    printf("START - Exit\n");
 }
 
 std::istream& GetLine(std::istream& is, std::string& t)
@@ -353,18 +340,254 @@ int levenshtein_distance(const std::string &s1, const std::string &s2)
     return result;
 }
 
+/* Menu Action Functions */
+void action_search()
+{
+    HB_Keyboard sHBKB;
+    bool bKBCancelled = false;
+
+    consoleClear();
+
+    printf("Please enter text to search for:\n");
+    std::string searchstring = getInput(&sHBKB, bKBCancelled);
+    if (bKBCancelled)
+    {
+        return;
+    }
+
+    // User has entered their input, so let's scrap the keyboard
+    clear_screen(GFX_BOTTOM);
+
+    std::vector<display_item> display_output;
+    std::ifstream ifs("/CIAngel/wings.json");
+    Json::Reader reader;
+    Json::Value obj;
+    reader.parse(ifs, obj);
+    const Json::Value& characters = obj; // array of characters
+    for (unsigned int i = 0; i < characters.size(); i++){
+        std::string temp;
+        temp = upper(characters[i]["name"].asString());
+
+        std::string uppersearchstring;
+        uppersearchstring = upper(searchstring);
+        
+        int ld = levenshtein_distance(temp, uppersearchstring);
+        bool isValid = false;
+        
+        if (temp.find(uppersearchstring) != std::string::npos)
+        {
+            ld = ld - 99;
+            isValid = true;
+        }
+
+        if (ld < 10)
+        {
+            isValid = true;
+        }
+        
+        if (isValid)
+        {
+            display_item item;
+            item.ld = ld;
+            item.index = i;
+            display_output.push_back(item);
+        }
+
+    }
+
+    // sort similar names by levenshtein distance
+    std::sort(display_output.begin(), display_output.end(), compareByLD);
+
+    // We technically have 30 rows to work with, minus 2 for header/footer. But stick with 20 entries for now
+    unsigned int display_amount = 20; 
+    if ( display_output.size() < display_amount )
+    {
+        display_amount = display_output.size();
+    }
+
+    if (display_amount == 0)
+    {
+        printf("No matching titles found.\n");
+        wait_key_specific("\nPress A to return.\n", KEY_A);
+        return;
+    }
+
+    // Eh, allocated memory because we need to format the data
+    char* results[display_amount];
+    for (u8 i = 0; i < display_amount; i++)
+    {
+        results[i] = (char*)malloc(51 * sizeof(char));
+        sprintf(results[i], "%-30s (%s) %s",
+                characters[display_output[i].index]["name"].asString().c_str(),
+                characters[display_output[i].index]["region"].asString().c_str(),
+                characters[display_output[i].index]["code"].asString().c_str());
+    }
+
+    char footer[51];
+    sprintf(footer, "Press A to %s. Press B to return.", (bInstallMode ? "Install" : "Download"));
+
+    int result = menu_draw("Select a Title", footer, 1, sizeof(results) / sizeof(char*), (const char**)results);
+
+    // Free our allocated memory
+    for (u8 i = 0; i < display_amount; i++)
+    {
+        free(results[i]);
+    }
+
+    if (result == -1)
+    {
+        return;
+    }
+
+    // Clean up the console since we'll be using it
+    consoleClear();
+
+    // Fetch the title data and start downloading
+    std::string selected_titleid = characters[display_output[result].index]["titleid"].asString();
+    std::string selected_enckey = characters[display_output[result].index]["enckey"].asString();
+    std::string selected_name = characters[display_output[result].index]["name"].asString();
+
+    printf("OK - %s\n", selected_name.c_str());
+
+    DownloadTitle(selected_titleid, selected_enckey, "/CIAngel/" + selected_name);
+    wait_key_specific("\nPress A to continue.\n", KEY_A);
+}
+
+void action_manual_entry()
+{
+    HB_Keyboard sHBKB;
+    bool bKBCancelled = false;
+
+    consoleClear();
+
+    // Keep looping so the user can retry if they enter a bad id/key
+    while(true)
+    {
+        printf("Please enter a titleID:\n");
+        std::string titleId = getInput(&sHBKB, bKBCancelled);
+        if (bKBCancelled)
+        {
+            break;
+        }
+
+        printf("Please enter the corresponding encTitleKey:\n");
+        std::string key = getInput(&sHBKB, bKBCancelled);
+        if (bKBCancelled)
+        {
+            break;
+        }
+
+        if (titleId.length() == 16 && key.length() == 32)
+        {
+            DownloadTitle(titleId, key, "/CIAngel");
+            wait_key_specific("\nPress A to continue.\n", KEY_A);
+            break;
+        }
+        else
+        {
+            printf("encTitleKeys are 32 characters long,\nand titleIDs are 16 characters long.\n");
+        }
+    }
+}
+
+void action_input_txt()
+{
+    consoleClear();
+
+    std::ifstream input;
+    std::string titleId;
+    std::string key;
+
+    input.open("/CIAngel/input.txt", std::ofstream::in);
+    GetLine(input, titleId);
+    GetLine(input, key);
+    DownloadTitle(titleId, key, "/CIAngel");
+
+    wait_key_specific("\nPress A to continue.\n", KEY_A);
+}
+
+void action_toggle_install()
+{
+    consoleClear();
+
+    bInstallMode = !bInstallMode;
+    if (bInstallMode)
+    {
+        if (!bSvcHaxAvailable)
+        {
+            bInstallMode = false;
+            printf(CONSOLE_RED "Kernel access not available.\nCan't enable Install Mode.\n" CONSOLE_RESET);
+            wait_key_specific("\nPress A to continue.", KEY_A);
+        }
+    }
+}
+
+void action_about()
+{
+    consoleClear();
+
+    printf(CONSOLE_RED "CIAngel by cearp and Drakia\n" CONSOLE_RESET);
+    printf("Download, create, and install CIAs directly\n");
+    printf("from Nintendo's CDN servers. Grabbing the\n");
+    printf("latest games has never been so easy.\n");
+    wait_key_specific("\nPress A to continue.\n", KEY_A);
+}
+
+/* Menu functions */
+void menu_main()
+{
+    const char *options[] = {
+        "Search for a title by name",
+        "Enter a title key/ID pair",
+        "Fetch title key/ID from input.txt",
+        "Toggle 'Install' mode (EXPERIMENTAL!)",
+        "About CIAngel",
+        "Exit"
+    };
+    char footer[31];
+
+    while (true)
+    {
+        // We have to update the footer every draw, incase the user switches install mode
+        sprintf(footer, "%s Mode%s", (bInstallMode ? "Install" : "Download"), (bInstallMode ? " (EXPERIMENTAL!)" : ""));
+
+        int result = menu_draw("CIAngel by cearp and Drakia", footer, 0, sizeof(options) / sizeof(char*), options);
+
+        switch (result)
+        {
+            case 0:
+                action_search();
+            break;
+            case 1:
+                action_manual_entry();
+            break;
+            case 2:
+                action_input_txt();
+            break;
+            case 3:
+                action_toggle_install();
+            break;
+            case 4:
+                action_about();
+            break;
+            case 5:
+                return;
+            break;
+        }
+
+        clear_screen(GFX_BOTTOM);
+    }
+}
+
 int main(int argc, const char* argv[])
 {
-    gfxInitDefault();
-    consoleInit(GFX_TOP, NULL);
-
     /* Sadly svchax crashes too much, so only allow install mode when running as a CIA
     // Trigger svchax so we can install CIAs
     if(argc > 0) {
         svchax_init(true);
         if(!__ctr_svchax || !__ctr_svchax_srv) {
             bSvcHaxAvailable = false;
-            printf("Failed to acquire kernel access. Install mode disabled.\n");
+            //printf("Failed to acquire kernel access. Install mode disabled.\n");
         }
     }
     */
@@ -376,207 +599,28 @@ int main(int argc, const char* argv[])
     }
 
     u32 *soc_sharedmem, soc_sharedmem_size = 0x100000;
+    gfxInitDefault();
+    consoleInit(GFX_TOP, NULL);
+
     httpcInit(0);
     soc_sharedmem = (u32 *)memalign(0x1000, soc_sharedmem_size);
     socInit(soc_sharedmem, soc_sharedmem_size);
     sslcInit(0);
     hidInit();
 
-    amInit();
-    AM_InitializeExternalTitleDatabase(false);
-    printf("CIAngel by cearp and Drakia\n");
-    PrintMenu(false);
-    printf("\n");
-
-    HB_Keyboard sHBKB;
-    touchPosition touch;
-    bool bKBCancelled = false;
-
-    while (aptMainLoop())
+    if (bSvcHaxAvailable)
     {
-        hidScanInput();
-
-        u32 keys = hidKeysDown();
-
-        if (keys & KEY_X)
-        {
-            printf("Please enter a titleID:\n");
-            std::string titleId = getInput(&sHBKB, bKBCancelled);
-            if (bKBCancelled)
-            {
-                bKBCancelled = false;
-                PrintMenu(true);
-                continue;
-            }
-
-            printf("Please enter the corresponding encTitleKey:\n");
-            std::string key = getInput(&sHBKB, bKBCancelled);
-            if (bKBCancelled)
-            {
-                bKBCancelled = false;
-                PrintMenu(true);
-                continue;
-            }
-
-            if (titleId.length() == 16 && key.length() == 32)
-            {
-                DownloadTitle(titleId, key, "/CIAngel");
-                PrintMenu(false);
-            }
-            else
-            {
-                printf("encTitleKeys are 32 characters long,\nand titleIDs are 16 characters long.\nPress X to try again, or Start to exit.\n");
-            }
-        }
-
-
-        if (keys & KEY_Y)
-        {
-            printf("Please enter text to search for the name:\n");
-            std::string searchstring = getInput(&sHBKB, bKBCancelled);
-            if (bKBCancelled)
-            {
-                bKBCancelled = false;
-                PrintMenu(true);
-                continue;
-            }
-
-            std::vector<display_item> display_output;
-            std::ifstream ifs("/CIAngel/wings.json");
-            Json::Reader reader;
-            Json::Value obj;
-            reader.parse(ifs, obj);
-            const Json::Value& characters = obj; // array of characters
-            for (unsigned int i = 0; i < characters.size(); i++){
-                std::string temp;
-                temp = upper(characters[i]["name"].asString());
-
-                std::string uppersearchstring;
-                uppersearchstring = upper(searchstring);
-                
-                int ld = levenshtein_distance(temp, uppersearchstring);
-                bool isValid = false;
-                
-                if (temp.find(uppersearchstring) != std::string::npos)
-                {
-                    ld = ld - 99;
-                    isValid = true;
-                }
-
-                if (ld < 10)
-                {
-                    isValid = true;
-                }
-                
-                if (isValid)
-                {
-                    display_item item;
-                    item.ld = ld;
-                    item.index = i;
-                    display_output.push_back(item);
-                }
-
-            }
-
-            // sort similar names by levenshtein distance
-            std::sort(display_output.begin(), display_output.end(), compareByLD);
-
-            // print a max of 6 most 'similar' names. if X items, vector size is X (not X-1)
-            unsigned int display_amount = 6; 
-            if ( display_output.size() < display_amount )
-            {
-                display_amount = display_output.size();
-            }
-
-            if (display_amount == 0)
-            {
-                printf("No matching titles found.\n");
-                PrintMenu(false);
-                continue;
-            }
-
-            for(unsigned int i=0; i < display_amount; i++){
-                printf( "%d - %s\n", i+1, characters[display_output[i].index]["name"].asString().c_str() );
-                printf( "    %s - ", characters[display_output[i].index]["region"].asString().c_str() );
-                printf( "%s\n", characters[display_output[i].index]["code"].asString().c_str() );
-            }
-
-
-            printf("Please enter number of game to download:\n");
-            int selectednum;
-            while (true)
-            {
-                std::string selectednumstring = getInput(&sHBKB, bKBCancelled);
-                if (bKBCancelled)
-                {
-                    break;
-                }
-                
-                std::stringstream iss(selectednumstring);
-                iss >> std::ws >> selectednum >> std::ws;
-
-                // Make sure the number was valid
-                if (!iss.eof())
-                {
-                    printf("Invalid. Please enter number of game to download:\n");
-                    continue;
-                }
-
-                break;
-            }
-
-            if (bKBCancelled)
-            {
-                PrintMenu(true);
-                bKBCancelled = false;
-                continue;
-            }
-
-            selectednum--;
-
-            std::string selected_titleid = characters[display_output[selectednum].index]["titleid"].asString();
-            std::string selected_enckey = characters[display_output[selectednum].index]["enckey"].asString();
-            std::string selected_name = characters[display_output[selectednum].index]["name"].asString();
-            
-            printf("OK - %s\n", selected_name.c_str());
-
-            DownloadTitle(selected_titleid, selected_enckey, "/CIAngel/" + selected_name);
-            PrintMenu(false);
-        }
-
-        if (keys & KEY_R)
-        {
-            bInstallMode = !bInstallMode;
-            if (bInstallMode)
-            {
-                if (!bSvcHaxAvailable)
-                {
-                    printf("Kernel access not available. Can't enable Install Mode.\n");
-                    bInstallMode = false;
-                }
-                else
-                {
-                    printf("Switched to Install Mode. This is EXPERIMENTAL!\n");
-                }
-            }
-            else
-            {
-                printf("Switched to Create Mode.\n");
-            }
-        }    
-
-        if (keys & KEY_START) break;
-
-        //Prevent keyboard flicker after failed input attempt
-        hidTouchRead(&touch);
-        sHBKB.HBKB_CallKeyboard(touch);
-
-        gfxFlushBuffers();
-        gfxSwapBuffers();
-        gspWaitForVBlank();
+        amInit();
+        AM_InitializeExternalTitleDatabase(false);
     }
 
-    amExit();
+    init_menu(GFX_TOP);
+    menu_main();
+
+    if (bSvcHaxAvailable)
+    {
+        amExit();
+    }
 
     gfxExit();
     hidExit();
