@@ -389,20 +389,32 @@ void action_search()
     Json::Value obj;
     reader.parse(ifs, obj);
     const Json::Value& characters = obj; // array of characters
-    for (unsigned int i = 0; i < characters.size(); i++){
+    for (unsigned int i = 0; i < characters.size(); i++)
+    {
         std::string temp;
-        temp = characters[i]["name"].asString();
+        temp = upper(characters[i]["name"].asString());
 
-        int ld = levenshtein_distance(upper(temp), upper(searchstring));
-    	if(temp.find("-System") == std::string::npos &&  (regionFilter == "off" || characters[i]["region"].asString() == regionFilter)) {
-    		if (ld < 10)
-    		{
-    		    display_item item;
-    		    item.ld = ld;
-    		    item.index = i;
-    		    display_output.push_back(item);
-    		}
-    	}
+        std::string uppersearchstring;
+        uppersearchstring = upper(searchstring);
+        
+        int ld = levenshtein_distance(temp, uppersearchstring);
+        
+        if (temp.find("-System") == std::string::npos && (regionFilter == "off" || characters[i]["region"].asString() == regionFilter)) 
+        {
+            if (temp.find(uppersearchstring) != std::string::npos)
+            {
+                ld = 1;
+            }
+
+            if (ld < 10)
+            {
+                display_item item;
+                item.ld = ld;
+                item.index = i;
+                display_output.push_back(item);
+            }
+        }
+
     }
 
     // sort similar names by levenshtein distance
