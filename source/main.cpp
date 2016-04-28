@@ -274,6 +274,19 @@ std::string getInput(HB_Keyboard* sHBKB, bool &bCancelled)
     return input;
 }
 
+void removeForbiddenChar(std::string* s)
+{
+    std::string::iterator it;
+    std::string illegalChars = "\\/:?\"<>|";
+    for (it = s->begin() ; it < s->end() ; ++it){
+        bool found = illegalChars.find(*it) != std::string::npos;
+        if(found)
+        {
+            *it = ' ';
+        }
+    }
+}
+
 std::istream& GetLine(std::istream& is, std::string& t)
 {
     t.clear();
@@ -445,6 +458,8 @@ void action_search()
     std::string selected_name = characters[display_output[result].index]["name"].asString();
 
     printf("OK - %s\n", selected_name.c_str());
+    //removes any problem chars, not sure if whitespace is a problem too...?
+    removeForbiddenChar(&selected_name);
 
     DownloadTitle(selected_titleid, selected_enckey, "/CIAngel/" + selected_name);
     wait_key_specific("\nPress A to continue.\n", KEY_A);
@@ -560,7 +575,7 @@ void menu_main()
         "About CIAngel",
         "Exit"
     };
-    char footer[31];
+    char footer[42];
 
     while (true)
     {
