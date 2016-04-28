@@ -35,7 +35,9 @@
 
 static const u16 top = 0x140;
 static bool bSvcHaxAvailable = true;
-static bool bInstallMode = false;
+enum install_modes {make_cia, install_direct, install_ticket};
+install_modes selected_mode = make_cia;
+
 static std::string regionFilter = "off";
 
 std::string upper(std::string s)
@@ -92,7 +94,7 @@ Result ConvertToCIA(std::string dir, std::string titleId)
     chdir(cwd);
 
     int result;
-    if (bInstallMode)
+    if (selected_mode == install_direct)
     {
         result = install_cia(tmd_context, tik_context);
     }
@@ -182,12 +184,21 @@ void CreateTicket(std::string titleId, std::string encTitleKey, char* titleVersi
 
 Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string outputDir)
 {
-    printf("Starting %s - %s\n", (bInstallMode ? "install" : "download"), titleId.c_str());
+    std::string mode_text;
+    if(selected_mode == make_cia){
+        mode_text = "creating";
+    }
+    else if(selected_mode == install_direct){
+        mode_text = "installing";
+    }
+
+
+    printf("Starting - %s\n", titleId.c_str());
 
     mkpath((outputDir + "/tmp/").c_str(), 0777);
 
     // Make sure the CIA doesn't already exist
-    if (!bInstallMode && FileExists(outputDir + "/" + titleId + ".cia"))
+    if ( (selected_mode == make_cia) && FileExists(outputDir + "/" + titleId + ".cia"))
     {
         printf("%s/%s.cia already exists.\n", outputDir.c_str(), titleId.c_str());
         return 0;
@@ -215,16 +226,16 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string o
 
     CreateTicket(titleId, encTitleKey, titleVersion, outputDir + "/tmp/cetk");
 
-    printf("Now %s the CIA...\n", (bInstallMode ? "installing" : "creating"));
+    printf("Now %s the CIA...\n", mode_text.c_str());
 
     res = ConvertToCIA(outputDir + "/tmp", titleId);
     if (res != 0)
     {
-        printf("Could not %s the CIA.\n", (bInstallMode ? "install" : "create"));
+        printf("Could not %s the CIA.\n", mode_text.c_str());
         return res;
     }
 
-    if (!bInstallMode)
+    if(selected_mode == make_cia)
     {
         rename((outputDir + "/tmp/" + titleId + ".cia").c_str(), (outputDir + "/" + titleId + ".cia").c_str());
     }
@@ -388,7 +399,7 @@ void action_search()
         
         int ld = levenshtein_distance(temp, uppersearchstring);
         
-        if (temp.find("-SYSTEM") == std::string::npos && (regionFilter == "off" || characters[i]["region"].asString() == regionFilter)) 
+        if (temp.find("-System") == std::string::npos && (regionFilter == "off" || characters[i]["region"].asString() == regionFilter)) 
         {
             if (temp.find(uppersearchstring) != std::string::npos)
             {
@@ -403,6 +414,7 @@ void action_search()
                 display_output.push_back(item);
             }
         }
+
     }
 
     // sort similar names by levenshtein distance
@@ -433,8 +445,17 @@ void action_search()
                 characters[display_output[i].index]["code"].asString().c_str());
     }
 
+    std::string mode_text;
+    if(selected_mode == make_cia) {
+        mode_text = "Create CIA";
+    } else if (selected_mode == install_direct) {
+        mode_text = "Install CIA";
+    } else if (selected_mode == install_ticket) {
+        mode_text = "Create Ticket";
+    }
+
     char footer[51];
-    sprintf(footer, "Press A to %s. Press B to return.", (bInstallMode ? "Install" : "Download"));
+    sprintf(footer, "Press A to %s. Press B to return.", mode_text.c_str());
 
     int result = menu_draw("Select a Title", footer, 1, sizeof(results) / sizeof(char*), (const char**)results);
 
@@ -461,7 +482,15 @@ void action_search()
     //removes any problem chars, not sure if whitespace is a problem too...?
     removeForbiddenChar(&selected_name);
 
-    DownloadTitle(selected_titleid, selected_enckey, "/CIAngel/" + selected_name);
+    if(selected_mode == install_ticket){
+        char empty_titleVersion[2] = {0x00, 0x00};
+        mkpath("/CIAngel/tickets/", 0777); 
+        CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tickets/" + selected_name + ".tik"); 
+    }
+    else{
+        DownloadTitle(selected_titleid, selected_enckey, "/CIAngel/" + selected_name);
+    }
+
     wait_key_specific("\nPress A to continue.\n", KEY_A);
 }
 
@@ -522,13 +551,20 @@ void action_toggle_install()
 {
     consoleClear();
 
-    bInstallMode = !bInstallMode;
-    if (bInstallMode)
+    if(selected_mode == make_cia) {
+        selected_mode = install_direct;
+    } else if (selected_mode == install_direct) {
+        selected_mode = install_ticket;
+    } else if (selected_mode == install_ticket) {
+        selected_mode = make_cia;
+    }
+    
+    if ( (selected_mode == install_ticket) || (selected_mode == install_direct) )
     {
         if (!bSvcHaxAvailable)
         {
-            bInstallMode = false;
-            printf(CONSOLE_RED "Kernel access not available.\nCan't enable Install Mode.\n" CONSOLE_RESET);
+            selected_mode = make_cia;
+            printf(CONSOLE_RED "Kernel access not available.\nCan't enable Install modes. You can only make a CIA.\n" CONSOLE_RESET);
             wait_key_specific("\nPress A to continue.", KEY_A);
         }
     }
@@ -571,7 +607,7 @@ void menu_main()
         "Enable region filter for search",
         "Enter a title key/ID pair",
         "Fetch title key/ID from input.txt",
-        "Toggle 'Install' mode (EXPERIMENTAL!)",
+        "Change Install mode (see footer)",
         "About CIAngel",
         "Exit"
     };
@@ -579,8 +615,19 @@ void menu_main()
 
     while (true)
     {
+        std::string mode_text;
+        if(selected_mode == make_cia) {
+            mode_text = "Create CIA";
+        }
+        else if (selected_mode == install_direct) {
+            mode_text = "Install CIA";
+        }
+        else if (selected_mode == install_ticket) {
+            mode_text = "Create Ticket";
+        }
+
         // We have to update the footer every draw, incase the user switches install mode
-        sprintf(footer, "%s Mode%s Region:%s", (bInstallMode ? "Install" : "Download"), (bInstallMode ? " (EXPERIMENTAL!)" : ""), regionFilter.c_str());
+        sprintf(footer, "Mode:%s Region:%s", mode_text.c_str(), regionFilter.c_str());
 
         int result = menu_draw("CIAngel by cearp and Drakia", footer, 0, sizeof(options) / sizeof(char*), options);
 
