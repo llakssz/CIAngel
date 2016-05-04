@@ -547,6 +547,24 @@ void clear_screen(gfxScreen_t screen)
 bool check_JSON() {
     if(!FileExists ("/CIAngel/wings.json")) {
         printf("No wings.json\n Don't expect the search to work\n");
+        
+        hidScanInput();
+        u32 keys = hidKeysDown();
+        if(keys & KEY_R) { 
+            printf("Attempting to get json...\n");
+            remove("/CIAngel/wings.json.tmp");
+            FILE *oh = fopen("/CIAngel/wings.json.tmp", "wb");
+            if (oh) {
+                Result res = DownloadFile(JSON_URL, oh, false);
+                fclose(oh);
+                if (res != 0) {
+                    printf("Could not download JSON. Sorry.\n");
+                } else {
+                    remove("/CIAngel/wings.json");
+                    rename("/CIAngel/wings.json.tmp", "/CIiAngel/wings.json");
+                }
+            }
+        }
         wait_key_specific("\nPress A to return.\n", KEY_A);
         return false;
     }
