@@ -361,7 +361,16 @@ std::string getInput(HB_Keyboard* sHBKB, bool &bCancelled)
         else if (KBState != 4)
         {
             printf("%c[2K\r", 27);
-            printf("%s", input.c_str());
+
+            // If input string is > 50 characters, show just the right hand side
+            if (input.length() > 49)
+            {
+                printf("%s", input.substr(input.length() - 49).c_str());
+            }
+            else
+            {
+                printf("%s", input.c_str());
+            }
         }
 
         // Flush and swap framebuffers
