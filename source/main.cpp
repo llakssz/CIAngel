@@ -542,7 +542,14 @@ void action_search()
     int outScore;
     
     for (unsigned int i = 0; i < sourceData.size(); i++) {
+        // Check the region filter
         if(regionFilter != "off" && sourceData[i]["region"].asString() != regionFilter) {
+            continue;
+        }
+
+        // Check that the encTitleKey isn't null
+        if (sourceData[i]["encTitleKey"].isNull())
+        {
             continue;
         }
 
@@ -787,7 +794,7 @@ void action_exit()
     bExit = true;
 }
 
-void action_download()
+void action_download_json()
 {
     consoleClear();
 
@@ -821,7 +828,7 @@ bool menu_main_keypress(int selected, u32 key, void*)
                 action_input_txt();
             break;
             case 4:
-                action_download();
+                action_download_json();
             break;
             case 5:
                 action_about();
