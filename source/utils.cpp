@@ -766,3 +766,32 @@ bool check_JSON() {
     return true;
 }
 
+std::string GetSerialType(std::string sSerial)
+{
+    std::string sType = "Unknown";
+    if (sSerial.substr(0, 3) == "TWL")
+    {
+        sType = "DSiWare";
+    }
+    else
+    {
+        switch (sSerial.c_str()[4])
+        {
+            case 'N':
+            case 'P':
+                sType = "Game";
+                break;
+            case 'T':
+                sType = "Demo";
+                break;
+            case 'U':
+                sType = "Update";
+                break;
+            case 'M':
+                sType = "DLC";
+                break;
+        }
+    }
+
+    return sType;
+}

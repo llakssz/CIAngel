@@ -50,10 +50,30 @@ void menu_draw_string_full(const char* str, int pos_y, const char* color)
 
     gfxFlushBuffers();
 }
+
+void menu_draw_info(PrintConsole &console, const game_item &game)
+{
+    PrintConsole* currentConsole = consoleSelect(&console);
+    consoleClear();
+
+    printf("Name:    %s\n", game.name.c_str());
+    printf("Serial:  %s\n", game.code.c_str());
+    printf("Region:  %s\n", game.region.c_str());
+    printf("TitleID: %s\n", game.titleid.c_str());
+    printf("Type:    %s\n", GetSerialType(game.code).c_str());
+
+    consoleSelect(currentConsole);
+}
+
 void titles_multkey_draw(const char *title, const char* footer, int back, std::vector<game_item> *options, void* data,
                       bool (*callback)(int result, u32 key, void* data))
 
 {
+    // Set up a console on the bottom screen for info
+    GSPGPU_FramebufferFormats infoOldFormat = gfxGetScreenFormat(GFX_BOTTOM);
+    PrintConsole infoConsole = *consoleGetDefault();
+    consoleInit(GFX_BOTTOM, &infoConsole);
+
     // Select our menu console and clear the screen
     PrintConsole* currentConsole = consoleSelect(&currentMenu.menuConsole);
     
@@ -113,6 +133,8 @@ void titles_multkey_draw(const char *title, const char* footer, int back, std::v
                 }
             }
             previous_index = current;
+
+            menu_draw_info(infoConsole, (*options)[current]);
         }
         u32 key = wait_key();
         
@@ -141,6 +163,9 @@ void titles_multkey_draw(const char *title, const char* footer, int back, std::v
 
     // Reselect the original console
     consoleSelect(currentConsole);
+
+    // Reset the gfx format on the bottom screen
+    gfxSetScreenFormat(GFX_BOTTOM, infoOldFormat);
 }
 
 void menu_multkey_draw(const char *title, const char* footer, int back, int count, const char *options[], void* data,

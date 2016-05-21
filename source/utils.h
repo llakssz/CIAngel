@@ -27,6 +27,12 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 #define JSON_TYPE_WINGS 1
 #define JSON_TYPE_ONLINE 2
 
+// C++ only code
+#ifdef __cplusplus
+#include <string>
+std::string GetSerialType(std::string sSerial);
+#endif
+
 //MISC
 #ifdef __cplusplus
 extern "C" {
