@@ -782,11 +782,18 @@ void action_about()
 {
     consoleClear();
 
-    printf(CONSOLE_RED "CIAngel by cearp and Drakia\n" CONSOLE_RESET);
+    printf(CONSOLE_RED "CIAngel\n\n" CONSOLE_RESET);
     printf("Download, create, and install CIAs directly\n");
     printf("from Nintendo's CDN servers. Grabbing the\n");
-    printf("latest games has never been so easy.\n");
-    wait_key_specific("\nPress A to continue.\n", KEY_A);
+    printf("latest games has never been so easy.\n\n");
+
+    printf("Contributors: Cearp, Drakia, superbudvar,\n");
+    printf("              mysamdog, cerea1killer\n");
+
+    printf("\n\nCommit: " REVISION_STRING "\n\n");
+
+    printf("\nPress any button to continue.");
+    wait_key();
 }
 
 void action_exit()
