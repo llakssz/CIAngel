@@ -71,11 +71,12 @@ void titles_multkey_draw(const char *title, const char* footer, int back, std::v
 {
     // Set up a console on the bottom screen for info
     GSPGPU_FramebufferFormats infoOldFormat = gfxGetScreenFormat(GFX_BOTTOM);
-    PrintConsole infoConsole = *consoleGetDefault();
+    PrintConsole infoConsole;
+    PrintConsole* currentConsole = consoleSelect(&infoConsole);
     consoleInit(GFX_BOTTOM, &infoConsole);
 
     // Select our menu console and clear the screen
-    PrintConsole* currentConsole = consoleSelect(&currentMenu.menuConsole);
+    consoleSelect(&currentMenu.menuConsole);
     
     int count = options->size();
     bool firstLoop = true;
