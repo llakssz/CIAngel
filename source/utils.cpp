@@ -145,7 +145,7 @@ void PrintProgress(PrintConsole *console, u32 nSize, u32 nCurrent)
 
 	// Calculate percent and bar width
 	double fPercent = ((double)nCurrent / nSize) * 100.0;
-	u16 barDrawWidth = (fPercent / 100) * 50;
+	u16 barDrawWidth = (fPercent / 100) * 40;
 
 	int i = 0;
 	for (i = 0; i < barDrawWidth; i++)
