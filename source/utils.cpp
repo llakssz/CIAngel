@@ -24,6 +24,7 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <sys/time.h>
 
 //MISC
 void char_to_int_array(unsigned char destination[], char source[], int size, int endianness, int base)
@@ -117,26 +118,66 @@ void resolve_flag_u16(u16 flag, unsigned char *flag_bool)
 }
 
 //IO Related
-void PrintProgress(u32 nSize, u32 nCurrent)
+int diff_ms(timeval t1, timeval t2)
+{
+    return (((t1.tv_sec - t2.tv_sec) * 1000000) + 
+            (t1.tv_usec - t2.tv_usec))/1000;
+}
+
+void PrintProgress(PrintConsole *console, u32 nSize, u32 nCurrent)
 {
 	// Don't attempt to calculate anything if we don't have a final size
 	if (nSize == 0) return;
 	
+	// Switch to the progress console
+	PrintConsole* currentConsole = consoleSelect(console);
+	consoleClear();
+
+	// Set the start time if nLastSize is 0
+	static struct timeval tStartTime;
+	if (nCurrent == 0)
+	{
+		gettimeofday(&tStartTime, NULL);
+	}
+
+	// Offset everything by 10 lines to kinda center it
+	printf("\n\n\n\n\n\n\n\n\n\n");
+
 	// Calculate percent and bar width
 	double fPercent = ((double)nCurrent / nSize) * 100.0;
-	u16 barDrawWidth = (fPercent / 100) * 40;
+	u16 barDrawWidth = (fPercent / 100) * 50;
 
 	int i = 0;
-	printf("% 3.2f%% ", fPercent);
 	for (i = 0; i < barDrawWidth; i++)
 	{
 		printf("|");
 	}
-	printf("\r");
+	printf("\n");
+
+	// Output current progress
+	printf("   %0.2f / %0.2fMB  % 3.2f%%\n", ((double)nCurrent) / 1024 / 1024, ((double)nSize) / 1024 / 1024, fPercent);
+
+	// Calculate download speed
+	if (nCurrent > 0)
+	{
+		struct timeval tTime;
+		gettimeofday(&tTime, NULL);
+
+		int ms = diff_ms(tTime, tStartTime);
+		double seconds = ((double)ms) / 1000;
+		if (seconds > 0)
+		{
+			double speed = ((nCurrent / seconds) / 1024);
+			printf("   Avg Speed: %.02f KB/s\n", speed);
+		}
+	}
 
 	// Make sure the screen updates
     gfxFlushBuffers();
     gspWaitForVBlank();
+
+    // Switch back to the original console
+    consoleSelect(currentConsole);
 }
 
 void WriteBuffer(void *buffer, u64 size, u64 offset, FILE *output)
@@ -265,9 +306,19 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
     Result ret = 0;
     Result dlret = HTTPC_RESULTCODE_DOWNLOADPENDING;
     u32 status;
-    u32 bufSize = 0x100000;
+    u32 bufSize = 1024 * 256;
     u32 readSize = 0;
     httpcOpenContext(&context, HTTPC_METHOD_GET, (char*)url, 1);
+
+    // If we're showing progress, set up a console on the bottom screen
+    GSPGPU_FramebufferFormats infoOldFormat = gfxGetScreenFormat(GFX_BOTTOM);
+    PrintConsole infoConsole;
+    if (bProgress)
+    {
+	    PrintConsole* currentConsole = consoleSelect(&infoConsole);
+	    consoleInit(GFX_BOTTOM, &infoConsole);
+	    consoleSelect(currentConsole);
+    }
 
     ret = httpcBeginRequest(&context);
     if (ret != 0) goto _out;
@@ -293,6 +344,12 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
             goto _out;
         }
 
+        // Initialize the Progress bar if we're showing one
+        if (bProgress)
+        {
+            PrintProgress(&infoConsole, fileSize, procSize);
+        }
+
         while (dlret == (s32)HTTPC_RESULTCODE_DOWNLOADPENDING)
         {
         	// Check if the app is closing
@@ -300,6 +357,15 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
         		ret = -1;
         		break;
         	}
+
+            // Check if the user has pressed B, and cancel if so
+            hidScanInput();
+            u32 keys = hidKeysDown();
+            if (keys & KEY_B)
+            {
+                ret = -1;
+                break;
+            }
 
             memset(buffer, 0, bufSize);
 
@@ -309,7 +375,7 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
             procSize += readSize;
             if (bProgress)
             {
-            	PrintProgress(fileSize, procSize);
+                PrintProgress(&infoConsole, fileSize, procSize);
             }
         }
 
@@ -318,6 +384,12 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
     }
 _out:
     httpcCloseContext(&context);
+
+    // If showing progress, restore the bottom screen
+    if (bProgress)
+    {
+        gfxSetScreenFormat(GFX_BOTTOM, infoOldFormat);
+    }
 
     return ret;
 }

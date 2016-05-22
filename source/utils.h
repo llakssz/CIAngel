@@ -41,7 +41,7 @@ void resolve_flag_u16(u16 flag, unsigned char *flag_bool);
 bool download_JSON();
 bool check_JSON();
 //IO Related
-void PrintProgress(u32 nSize, u32 nCurrent);
+void PrintProgress(PrintConsole *console, u32 nSize, u32 nCurrent);
 void WriteBuffer(void *buffer, u64 size, u64 offset, FILE *output);
 void write_align_padding(FILE *output, size_t alignment);
 u64 GetFileSize_u64(char *filename);

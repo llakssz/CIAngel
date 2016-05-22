@@ -323,7 +323,11 @@ void ProcessGameQueue()
         }
         else
         {
-            DownloadTitle(selected_titleid, selected_enckey, selected_name);
+            Result res = DownloadTitle(selected_titleid, selected_enckey, selected_name);
+            if (R_FAILED(res)) {
+                printf("Error processing queue. Returning to menu\n");
+                break;
+            }
         }
 
         game = game_queue.erase(game);
