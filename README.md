@@ -32,6 +32,16 @@ CIAngel can read a text file (sd:/CIAngel/input.txt) that has 2 lines.
 The first line must be the title id.
 The second line must be the encrypted title key.
 
+# Thanks!
+CIAngel has been developed with many contributions from the community, both ideas and code contributions. Many thanks to the following (non-exhaustive) list of contributors!
+* Cearp
+* Drakia
+* superbudvar
+* mysamdog
+* cerea1killer
+* machinamentum for the original FirmwareDownload code
+* Steveice10 for many insights into CIA handling in FBI
+
 # Building
 CIAngel has a few dependencies required to build, as well as a git submodule that will need to be fetched.
 

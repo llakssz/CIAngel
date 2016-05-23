@@ -225,7 +225,7 @@ void InstallTicket(std::string FullPath, std::string TitleId)
     remove(FullPath.c_str());
 }
 
-Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string titleName)
+Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string titleName, std::string region)
 {
     // Wait for wifi to be available
     u32 wifi = 0;
@@ -251,6 +251,12 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
     if (titleName.length() == 0)
     {
         titleName = titleId;
+    }
+
+    // Include region in filename
+    if (region.length() > 0)
+    {
+        titleName = titleName = " (" + region + ")";
     }
 
     std::string mode_text;
@@ -293,6 +299,49 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
         return res;
     }
 
+// Commented out as the InstallSeed call doesn't currently work
+    // Download and install the SEEDDB entry if install mode
+/*
+    if (selected_mode == install_direct)
+    {
+        u8 seed[16];
+        static const char* regionStrings[] = {"JP", "US", "GB", "GB", "HK", "KR", "TW"};
+        u8 region = CFG_REGION_USA;
+        CFGU_GetSystemLanguage(&region);
+
+        char url[128];
+        snprintf(url, 128, SEED_URL "0x%s/ext_key?country=%s", titleId.c_str(), regionStrings[region]);
+
+        httpcContext context;
+        if(R_SUCCEEDED(res = httpcOpenContext(&context, HTTPC_METHOD_GET, url, 1))) {
+            httpcSetSSLOpt(&context, SSLCOPT_DisableVerify);
+
+            u32 responseCode = 0;
+            if(R_SUCCEEDED(res = httpcBeginRequest(&context)) && R_SUCCEEDED(res = httpcGetResponseStatusCode(&context, &responseCode, 0))) {
+                if(responseCode == 200) {
+                    u32 pos = 0;
+                    u32 bytesRead = 0;
+                    while(pos < sizeof(seed) && (R_SUCCEEDED(res = httpcDownloadData(&context, &seed[pos], sizeof(seed) - pos, &bytesRead)) || (u32)res == HTTPC_RESULTCODE_DOWNLOADPENDING)) {
+                        pos += bytesRead;
+                    }
+                } else {
+                    res = -1;
+                }
+            }
+
+            httpcCloseContext(&context);
+        }
+
+        char* nTitleId = parse_string(titleId);
+        u64 uTitleId = u8_to_u64((u8*)nTitleId, BIG_ENDIAN);
+        free (nTitleId);
+
+        if(R_SUCCEEDED(res)) {
+            Result res2 = InstallSeed(uTitleId, seed);
+        }
+    }
+*/
+
     //read version
     std::ifstream tmdfs;
     tmdfs.open(outputDir + "/tmp/tmd", std::ofstream::out | std::ofstream::in | std::ofstream::binary);
@@ -333,6 +382,7 @@ void ProcessGameQueue()
         std::string selected_titleid = (*game).titleid;
         std::string selected_enckey = (*game).titlekey;
         std::string selected_name = (*game).name;
+        std::string selected_region = (*game).region;
 
         if (selected_mode == install_ticket)
         {
@@ -341,7 +391,7 @@ void ProcessGameQueue()
         }
         else
         {
-            DownloadTitle(selected_titleid, selected_enckey, selected_name);
+            DownloadTitle(selected_titleid, selected_enckey, selected_name, selected_region);
         }
 
         game = game_queue.erase(game);
@@ -485,6 +535,7 @@ bool menu_search_keypress(int selected, u32 key, void* data)
         std::string selected_titleid = (*cb_data)[selected].titleid;
         std::string selected_enckey = (*cb_data)[selected].titlekey;
         std::string selected_name = (*cb_data)[selected].name;
+        std::string selected_region = (*cb_data)[selected].region;
 
         printf("OK - %s\n", selected_name.c_str());
         //removes any problem chars, not sure if whitespace is a problem too...?
@@ -496,7 +547,7 @@ bool menu_search_keypress(int selected, u32 key, void* data)
             InstallTicket("/CIAngel/tmp/ticket", selected_titleid);
         }
         else{
-            DownloadTitle(selected_titleid, selected_enckey, selected_name);
+            DownloadTitle(selected_titleid, selected_enckey, selected_name, selected_region);
         }
 
         wait_key_specific("\nPress A to continue.\n", KEY_A);
@@ -710,7 +761,7 @@ void action_manual_entry()
         }
         if (titleId.length() == 16 && key.length() == 32)
         {
-            DownloadTitle(titleId, key, "");
+            DownloadTitle(titleId, key, "", "");
             wait_key_specific("\nPress A to continue.\n", KEY_A);
             break;
         }
@@ -738,7 +789,7 @@ void action_input_txt()
     input.open("/CIAngel/input.txt", std::ofstream::in);
     GetLine(input, titleId);
     GetLine(input, key);
-    DownloadTitle(titleId, key, "");
+    DownloadTitle(titleId, key, "", "");
 
     wait_key_specific("\nPress A to continue.\n", KEY_A);
 }
@@ -926,6 +977,7 @@ int main(int argc, const char* argv[])
     sslcInit(0);
     hidInit();
     acInit();
+    cfguInit();
 
     if (bSvcHaxAvailable)
     {
@@ -950,6 +1002,7 @@ int main(int argc, const char* argv[])
         amExit();
     }
 
+    cfguExit();
     acExit();
     gfxExit();
     hidExit();

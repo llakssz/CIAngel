@@ -19,6 +19,7 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 #include <3ds.h>
 
 #define NUS_URL "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/"
+#define SEED_URL "https://kagiya-ctr.cdn.nintendo.net/title/"
 #define JSON_URL "https://3ds.titlekeys.com/json"
 
 // Check for updates every 3 days automatically?
@@ -52,6 +53,7 @@ char *getcwdir(char *buffer,int maxlen);
 bool FileExists (char *name);
 Result DownloadFile(const char *url, FILE *os, bool bProgress);
 Result DownloadFileInstall(const char *url, Handle *handle, u32* offset);
+Result InstallSeed(u64 titleId, const void* seed);
 //Data Size conversion
 u16 u8_to_u16(u8 *value, u8 endianness);
 u32 u8_to_u32(u8 *value, u8 endianness);

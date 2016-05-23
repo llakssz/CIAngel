@@ -493,6 +493,24 @@ Result DownloadFileInstall(const char *url, Handle *handle, u32* offset)
 	return res;
 }
 
+// Install the passed in seed for the titleid. 
+// Code from FBI: https://github.com/Steveice10/FBI/blob/45f12418520e99795c8e4d4dee3a1f000acc91a5/source/core/util.c#L239
+// Copyright (C) 2015 Steveice10
+Result InstallSeed(u64 titleId, const void* seed) {
+    u32 *cmdbuf = getThreadCommandBuffer();
+
+    cmdbuf[0] = IPC_MakeHeader(0x87a, 6, 0); // 0x87a0180
+    cmdbuf[1] = (u32) titleId;
+    cmdbuf[2] = (u32) (titleId >> 32);
+    memcpy(&cmdbuf[3], seed, 16);
+
+    Result ret = 0;
+    if(R_FAILED(ret = svcSendSyncRequest(*fsGetSessionHandle()))) return ret;
+
+    ret = cmdbuf[1];
+    return ret;
+}
+
 //Data Size conversion
 u16 u8_to_u16(u8 *value, u8 endianness)
 {
