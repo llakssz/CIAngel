@@ -60,20 +60,21 @@ bool compareByScore(const game_item &a, const game_item &b)
     return a.score > b.score;
 }
 
-Result ConvertToCIA(std::string dir, std::string titleName)
+Result ProcessCIA(std::string dir, std::string titleName)
 {
-    char cwd[1024];
-    if (getcwdir(cwd, sizeof(cwd)) == NULL){
-        printf("[!] Could not store Current Working Directory\n");
+    FILE *tik = fopen((dir + "/ticket").c_str(), "rb");
+    if (!tik) 
+    {
         return -1;
     }
-    chdir(dir.c_str());
-    FILE *tik = fopen("cetk", "rb");
-    if (!tik) return -1;
     TIK_CONTEXT tik_context = process_tik(tik);
 
     FILE *tmd = fopen((dir + "/tmd").c_str(),"rb");
-    if (!tmd) return -1;
+    if (!tmd) 
+    {
+        fclose(tik);
+        return -1;
+    }
     TMD_CONTEXT tmd_context = process_tmd(tmd);
 
     if(tik_context.result != 0 || tmd_context.result != 0){
@@ -84,8 +85,6 @@ Result ConvertToCIA(std::string dir, std::string titleName)
         return -1;
     }
 
-    chdir(cwd);
-
     int result;
     if (config.GetMode() == CConfig::Mode::INSTALL_CIA)
     {
@@ -94,14 +93,28 @@ Result ConvertToCIA(std::string dir, std::string titleName)
     else
     {
         FILE *output = fopen((dir + "/" + titleName + ".cia").c_str(),"wb");
-        if (!output) return -2;
-
-        result = generate_cia(tmd_context, tik_context, output);
-        if(result != 0){
-            remove((dir + "/" + titleName + ".cia").c_str());
+        if (!output) 
+        {
+            result = -2;
+        }
+        else
+        {
+            result = generate_cia(tmd_context, tik_context, output);
+            if(result != 0)
+            {
+                remove((dir + "/" + titleName + ".cia").c_str());
+            }
         }
     }
 
+    // free allocated memory/handles
+    free(tmd_context.content_struct);
+    fclose(tik);
+    fclose(tmd);
+
+    // Clean up temp files
+    remove((dir + "/ticket").c_str());
+    remove((dir + "/tmd").c_str());
     return result;
 }
 
@@ -165,7 +178,7 @@ void CreateTicket(std::string titleId, std::string encTitleKey, char* titleVersi
     std::ofstream ofs;
 
     ofs.open(outputFullPath, std::ofstream::out | std::ofstream::binary | std::ofstream::trunc);
-    ofs.write(tikTemp, 0xA50);
+    ofs.write(tikTemp, TICKET_SIZE);
     ofs.close();
 
     ofs.open(outputFullPath, std::ofstream::out | std::ofstream::in | std::ofstream::binary);
@@ -239,8 +252,6 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
 
     printf("Starting - %s\n", titleName.c_str());
 
-    mkpath((outputDir + "/tmp/").c_str(), 0777);
-
     // Make sure the CIA doesn't already exist
     std::string cp = outputDir + "/" + titleName + ".cia";
     char *ciaPath = new char[cp.size()+1];
@@ -278,11 +289,11 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
     tmdfs.read(titleVersion, 0x2);
     tmdfs.close();
 
-    CreateTicket(titleId, encTitleKey, titleVersion, outputDir + "/tmp/cetk");
+    CreateTicket(titleId, encTitleKey, titleVersion, outputDir + "/tmp/ticket");
 
     printf("Now %s the CIA...\n", mode_text.c_str());
 
-    res = ConvertToCIA(outputDir + "/tmp", titleName);
+    res = ProcessCIA(outputDir + "/tmp", titleName);
     if (res != 0)
     {
         printf("Could not %s the CIA.\n", mode_text.c_str());
@@ -296,8 +307,6 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
 
     printf(" DONE!\n");
 
-    // TODO remove tmp dir
-
     return res;
 }
 
@@ -305,10 +314,6 @@ void ProcessGameQueue()
 {
     // Create the tickets folder if we're in ticket mode
     char empty_titleVersion[2] = {0x00, 0x00};
-    if (config.GetMode() == CConfig::Mode::INSTALL_TICKET)
-    {
-        mkpath("/CIAngel/tickets/", 0777); 
-    }
 
     std::vector<game_item>::iterator game = game_queue.begin();
     while(aptMainLoop() && game != game_queue.end())
@@ -319,8 +324,8 @@ void ProcessGameQueue()
 
         if (config.GetMode() == CConfig::Mode::INSTALL_TICKET)
         {
-            CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tickets/" + selected_name + ".tik");
-            InstallTicket("/CIAngel/tickets/" + selected_name + ".tik");
+            CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tmp/ticket");
+            InstallTicket("/CIAngel/tmp/ticket");
         }
         else
         {
@@ -487,9 +492,8 @@ bool menu_search_keypress(int selected, u32 key, void* data)
         if(config.GetMode() == CConfig::Mode::INSTALL_TICKET)
         {
             char empty_titleVersion[2] = {0x00, 0x00};
-            mkpath("/CIAngel/tickets/", 0777); 
-            CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tickets/" + selected_name + ".tik");
-            InstallTicket("/CIAngel/tickets/" + selected_name + ".tik");
+            CreateTicket(selected_titleid, selected_enckey, empty_titleVersion, "/CIAngel/tmp/ticket");
+            InstallTicket("/CIAngel/tmp/ticket");
         }
         else
         {
@@ -552,8 +556,15 @@ void action_search()
     int outScore;
     
     for (unsigned int i = 0; i < sourceData.size(); i++) {
+        // Check the region filter
         std::string regionFilter = config.GetRegionFilter();
         if(regionFilter != "off" && sourceData[i]["region"].asString() != regionFilter) {
+            continue;
+        }
+
+        // Check that the encTitleKey isn't null
+        if (sourceData[i]["encTitleKey"].isNull())
+        {
             continue;
         }
 
@@ -802,11 +813,18 @@ void action_about()
 {
     consoleClear();
 
-    printf(CONSOLE_RED "CIAngel by cearp and Drakia\n" CONSOLE_RESET);
+    printf(CONSOLE_RED "CIAngel\n\n" CONSOLE_RESET);
     printf("Download, create, and install CIAs directly\n");
     printf("from Nintendo's CDN servers. Grabbing the\n");
-    printf("latest games has never been so easy.\n");
-    wait_key_specific("\nPress A to continue.\n", KEY_A);
+    printf("latest games has never been so easy.\n\n");
+
+    printf("Contributors: Cearp, Drakia, superbudvar,\n");
+    printf("              mysamdog, cerea1killer\n");
+
+    printf("\n\nCommit: " REVISION_STRING "\n\n");
+
+    printf("\nPress any button to continue.");
+    wait_key();
 }
 
 void action_exit()
@@ -814,7 +832,7 @@ void action_exit()
     bExit = true;
 }
 
-void action_download()
+void action_download_json()
 {
     consoleClear();
 
@@ -848,7 +866,7 @@ bool menu_main_keypress(int selected, u32 key, void*)
                 action_input_txt();
             break;
             case 4:
-                action_download();
+                action_download_json();
             break;
             case 5:
                 action_about();
@@ -952,8 +970,9 @@ int main(int argc, const char* argv[])
 
     init_menu(GFX_TOP);
 
-    // Make sure /CIAngel exists on the SD card
+    // Make sure all CIAngel directories exists on the SD card
     mkpath("/CIAngel", 0777);
+    mkpath("/CIAngel/tmp/", 0777);
     loadConfig();
     
     // Set up the reading of json
