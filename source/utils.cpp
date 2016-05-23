@@ -309,6 +309,7 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
     u32 bufSize = 1024 * 256;
     u32 readSize = 0;
     httpcOpenContext(&context, HTTPC_METHOD_GET, (char*)url, 1);
+    httpcSetSSLOpt(&context, SSLCOPT_DisableVerify);
 
     // If we're showing progress, set up a console on the bottom screen
     GSPGPU_FramebufferFormats infoOldFormat = gfxGetScreenFormat(GFX_BOTTOM);
@@ -394,166 +395,9 @@ _out:
     return ret;
 }
 
-Result DownloadFileSecure_Internal(const char *hostname, const char* request, void *out, bool bProgress,
-							 void (*write)(void* out, unsigned char* buffer, u32 readSize))
-{
-    Result ret=0;
-
-    struct addrinfo hints;
-    struct addrinfo *resaddr = NULL, *resaddr_cur;
-    int sockfd;
-    u8 *readbuf = (u8 *)linearAlloc(0x400);
-
-    sslcContext sslc_context;
-    //u32 RootCertChain_contexthandle=0;
-
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(sockfd==-1)
-    {
-        printf("Failed to create the socket.\n");
-        return -1;
-    }
-
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-
-    if(getaddrinfo(hostname, "443", &hints, &resaddr)!=0)
-    {
-        printf("getaddrinfo() failed.\n");
-        closesocket(sockfd);
-        return -1;
-    }
-
-    for(resaddr_cur = resaddr; resaddr_cur!=NULL; resaddr_cur = resaddr_cur->ai_next)
-    {
-        if(connect(sockfd, resaddr_cur->ai_addr, resaddr_cur->ai_addrlen)==0)break;
-    }
-
-    freeaddrinfo(resaddr);
-
-    if(resaddr_cur==NULL)
-    {
-        printf("Failed to connect.\n");
-        closesocket(sockfd);
-        return -1;
-    }
-
-    /*ret = sslcCreateRootCertChain(&RootCertChain_contexthandle);
-    if(R_FAILED(ret))
-    {
-        printf("sslcCreateRootCertChain() failed: 0x%08x.\n", (unsigned int)ret);
-        closesocket(sockfd);
-        return ret;
-    }
-
-    ret = sslcAddTrustedRootCA(RootCertChain_contexthandle, (u8*)builtin_rootca_bin, builtin_rootca_bin_len, NULL);
-    if(R_FAILED(ret))
-    {
-        printf("sslcAddTrustedRootCA() failed: 0x%08x.\n", (unsigned int)ret);
-        closesocket(sockfd);
-        sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        return ret;
-    }*/
-
-    // For the life of me can't get the 3DS to accept a Let's Encrypt cert, so for now don't verify
-    ret = sslcCreateContext(&sslc_context, sockfd, SSLCOPT_Default | SSLCOPT_DisableVerify, (char*)hostname);
-    if(R_FAILED(ret))
-    {
-        printf("sslcCreateContext() failed: 0x%08x.\n", (unsigned int)ret);
-        closesocket(sockfd);
-        //sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        return ret;
-    }
-
-    /*ret = sslcContextSetRootCertChain(&sslc_context, RootCertChain_contexthandle);
-    if(R_FAILED(ret))
-    {
-        printf("sslcContextSetRootCertChain() failed: 0x%08x.\n", (unsigned int)ret);
-        sslcDestroyContext(&sslc_context);
-        sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        closesocket(sockfd);
-        return ret;
-    }*/
-
-    ret = sslcStartConnection(&sslc_context, NULL, NULL);
-    if(R_FAILED(ret))
-    {
-        printf("sslcStartConnection() failed: 0x%08x.\n", (unsigned int)ret);
-        sslcDestroyContext(&sslc_context);
-        //sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        closesocket(sockfd);
-        return ret;
-    }
-
-    ret = sslcWrite(&sslc_context, (u8*)request, strlen(request));
-    if(R_FAILED(ret))
-    {
-        printf("sslcWrite() failed: 0x%08x.\n", (unsigned int)ret);
-        sslcDestroyContext(&sslc_context);
-        //sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        closesocket(sockfd);
-        return ret;
-    }
-
-    memset(readbuf, 0, 0x400);
-
-    bool bHeaderEnded = false;
-    while ((ret = sslcRead(&sslc_context, readbuf, 0x400-1, false)) > 0)
-    {
-        if(R_FAILED(ret))
-        {
-            printf("sslcWrite() failed: 0x%08x.\n", (unsigned int)ret);
-            sslcDestroyContext(&sslc_context);
-            //sslcDestroyRootCertChain(RootCertChain_contexthandle);
-            closesocket(sockfd);
-            return ret;
-        }
-
-        if (!bHeaderEnded)
-        {
-        	// Skip over the header, we don't really care about its contents.
-        	// Technically there's a very slim chance this fails to find the header
-        	char* headend = strstr((const char*)readbuf, "\r\n\r\n");
-        	if (headend != NULL)
-        	{
-        		int headlen = (headend - (char*)readbuf) + 4;
-        		write(out, (u8*)(headend + 4), (ret - headlen));
-        		bHeaderEnded = true;
-        	}
-        }
-        else
-        {
-        	write(out, readbuf, ret);
-        }
-    }
-    
-    sslcDestroyContext(&sslc_context);
-    //sslcDestroyRootCertChain(RootCertChain_contexthandle);
-    
-    closesocket(sockfd);
-
-    return 0;
-}
-
 Result DownloadFile(const char *url, FILE *os, bool bProgress)
 {
-	if (strlen(url) > 5 && strstr(url, "https:") != NULL)
-	{
-		// For HTTPS, we assume a properly formatted URL
-		std::string sUrl = url;
-		int nHostEnd = sUrl.find("/", 8);
-		std::string sPath = sUrl.substr(nHostEnd);
-		std::string sHost = sUrl.substr(8, nHostEnd - 8);
-		// I am so sorry for HTTP/1.0, but I can't be bothered to write chunked data handling right now
-	    std::string sRequest = "GET " + sPath + " HTTP/1.0\r\nUser-Agent: CIAngel\r\nConnection: close\r\nHost: " + sHost + "\r\n\r\n";
-
-		return DownloadFileSecure_Internal(sHost.c_str(), sRequest.c_str(), os, bProgress, DownloadFile_InternalSave);
-	}
-	else
-	{
-		return DownloadFile_Internal(url, os, bProgress, DownloadFile_InternalSave);
-	}
+	return DownloadFile_Internal(url, os, bProgress, DownloadFile_InternalSave);
 }
 
 // This function DOES NOT support HTTPS

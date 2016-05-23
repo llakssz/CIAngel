@@ -14,7 +14,6 @@ int selected_options[MAX_SELECTED_OPTIONS];
 void init_menu(gfxScreen_t screen)
 {
     // Create our new console, initialize it, and switch back to the previous console
-    currentMenu.menuConsole;
     PrintConsole* currentConsole = consoleSelect(&currentMenu.menuConsole);
     consoleInit(screen, &currentMenu.menuConsole);
 
