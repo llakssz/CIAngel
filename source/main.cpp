@@ -542,8 +542,28 @@ bool menu_search_keypress(int selected, u32 key, void* data)
     return false;
 }
 
+/* Search filter functions */
+// Fuzzy match based on the game name
+bool search_by_name(std::string &searchString, Json::Value &gameData, int &outScore)
+{
+    return fts::fuzzy_match(searchString.c_str(), gameData["ascii_name"].asCString(), outScore);
+}
+
+// Wildcard match based on game serial
+bool search_by_serial(std::string &searchString, Json::Value &gameData, int &outScore)
+{
+    if (sourceDataType == JSON_TYPE_WINGS) 
+    {
+        return (upperCase(gameData["code"].asString()).find(upperCase(searchString)) != std::string::npos);
+    }
+    else
+    {
+        return (upperCase(gameData["serial"].asString()).find(upperCase(searchString)) != std::string::npos);
+    }
+}
+
 /* Menu Action Functions */
-void action_search()
+void action_search(bool (*match)(std::string &searchString, Json::Value &gameData, int &outScore))
 {
     HB_Keyboard sHBKB;
     bool bKBCancelled = false;
@@ -561,11 +581,6 @@ void action_search()
     clear_screen(GFX_BOTTOM);
 
     std::vector<game_item> display_output;
-
-    // UTF8 normalization stuff
-    utf8proc_option_t options = (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_DECOMPOSE | UTF8PROC_COMPAT | UTF8PROC_STRIPMARK | UTF8PROC_STRIPCC);
-    utf8proc_uint8_t* szName;
-    utf8proc_uint8_t *str;
     int outScore;
     
     for (unsigned int i = 0; i < sourceData.size(); i++) {
@@ -581,12 +596,23 @@ void action_search()
             continue;
         }
 
-        // Normalize the name down to ASCII. This may break Japanese characters...
-        str = (utf8proc_uint8_t*)sourceData[i]["name"].asCString();
-        utf8proc_map(str, 0, &szName, options);
-        // Fuzzy match based on the search term
-        if (fts::fuzzy_match(searchString.c_str(), (const char*)szName, outScore))
+        // Create an ASCII version of the name if one doesn't exist yet
+        if (sourceData[i]["ascii_name"].isNull())
         {
+            // Normalize the name down to ASCII
+            utf8proc_option_t options = (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_DECOMPOSE | UTF8PROC_COMPAT | UTF8PROC_STRIPMARK | UTF8PROC_STRIPCC);
+            utf8proc_uint8_t* szName;
+            utf8proc_uint8_t *str = (utf8proc_uint8_t*)sourceData[i]["name"].asCString();
+            utf8proc_map(str, 0, &szName, options);
+
+            sourceData[i]["ascii_name"] = (const char*)szName;
+
+            free(szName);
+        }
+
+        if (match(searchString, sourceData[i], outScore))
+        {
+
             game_item item;
             item.score = outScore;
             item.index = i;
@@ -595,14 +621,14 @@ void action_search()
             case JSON_TYPE_WINGS:
               item.titleid = sourceData[i]["titleid"].asString();
               item.titlekey = sourceData[i]["enckey"].asString();
-              item.name = (const char*)szName;
+              item.name = sourceData[i]["ascii_name"].asString();
               item.region = sourceData[i]["region"].asString();
               item.code = sourceData[i]["code"].asString();
               break;
             case JSON_TYPE_ONLINE:
               item.titleid = sourceData[i]["titleID"].asString();
               item.titlekey = sourceData[i]["encTitleKey"].asString();
-              item.name = (const char*)szName;
+              item.name = sourceData[i]["ascii_name"].asString();
               item.region = sourceData[i]["region"].asString();
               item.code = sourceData[i]["serial"].asString();
               break;
@@ -613,10 +639,7 @@ void action_search()
             if(typeCheck == "0000" || typeCheck == "008c" || typeCheck == "000e" || typeCheck == "8004"){
                 display_output.push_back(item);
             }
-        
         }
-
-        free(szName);
     }
 
     unsigned int display_amount = display_output.size();
@@ -867,24 +890,27 @@ bool menu_main_keypress(int selected, u32 key, void*)
         switch (selected)
         {
             case 0:
-                action_search();
+                action_search(search_by_name);
             break;
             case 1:
-                action_prompt_queue();
+                action_search(search_by_serial);
             break;
             case 2:
-                action_manual_entry();
+                action_prompt_queue();
             break;
             case 3:
-                action_input_txt();
+                action_manual_entry();
             break;
             case 4:
-                action_download_json();
+                action_input_txt();
             break;
             case 5:
-                action_about();
+                action_download_json();
             break;
             case 6:
+                action_about();
+            break;
+            case 7:
                 action_exit();
             break;
         }
@@ -911,6 +937,7 @@ void menu_main()
 {
     const char *options[] = {
         "Search for a title by name",
+        "Search for a title by serial",
         "Process download queue",
         "Enter a title key/ID pair",
         "Fetch title key/ID from input.txt",

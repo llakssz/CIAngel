@@ -31,6 +31,7 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef __cplusplus
 #include <string>
 std::string GetSerialType(std::string sSerial);
+std::string upperCase(std::string input);
 #endif
 
 //MISC

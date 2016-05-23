@@ -134,10 +134,10 @@ void PrintProgress(PrintConsole *console, u32 nSize, u32 nCurrent)
 	consoleClear();
 
 	// Set the start time if nLastSize is 0
-	static struct timeval tStartTime;
+	static u64 nStartTime;
 	if (nCurrent == 0)
 	{
-		gettimeofday(&tStartTime, NULL);
+		nStartTime = osGetTime();
 	}
 
 	// Offset everything by 10 lines to kinda center it
@@ -160,11 +160,9 @@ void PrintProgress(PrintConsole *console, u32 nSize, u32 nCurrent)
 	// Calculate download speed
 	if (nCurrent > 0)
 	{
-		struct timeval tTime;
-		gettimeofday(&tTime, NULL);
+		u64 nTime = osGetTime();
+		double seconds = ((double)(nTime - nStartTime)) / 1000;
 
-		int ms = diff_ms(tTime, tStartTime);
-		double seconds = ((double)ms) / 1000;
 		if (seconds > 0)
 		{
 			double speed = ((nCurrent / seconds) / 1024);
@@ -710,4 +708,10 @@ std::string GetSerialType(std::string sSerial)
     }
 
     return sType;
+}
+
+std::string upperCase(std::string input) {
+  for (std::string::iterator it = input.begin(); it != input.end(); ++ it)
+    *it = toupper(*it);
+  return input;
 }
