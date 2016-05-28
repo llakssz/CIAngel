@@ -499,13 +499,15 @@ Result DownloadFileInstall(const char *url, Handle *handle, u32* offset)
 Result InstallSeed(u64 titleId, const void* seed) {
     u32 *cmdbuf = getThreadCommandBuffer();
 
-    cmdbuf[0] = IPC_MakeHeader(0x87a, 6, 0); // 0x87a0180
-    cmdbuf[1] = (u32) titleId;
+    cmdbuf[0] = IPC_MakeHeader(0x87a, 6, 0); // 0x087a0180
+    cmdbuf[1] = (u32) (titleId & 0xFFFFFFFF);
     cmdbuf[2] = (u32) (titleId >> 32);
     memcpy(&cmdbuf[3], seed, 16);
 
     Result ret = 0;
-    if(R_FAILED(ret = svcSendSyncRequest(*fsGetSessionHandle()))) return ret;
+    if(R_FAILED(ret = svcSendSyncRequest(*fsGetSessionHandle()))) {
+        return ret;
+    }
 
     ret = cmdbuf[1];
     return ret;
@@ -783,4 +785,3 @@ bool check_JSON() {
 
     return true;
 }
-

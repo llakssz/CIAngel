@@ -227,9 +227,15 @@ void InstallTicket(std::string FullPath, std::string TitleId)
 
 Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string titleName, std::string region)
 {
+    // Convert the titleid to a u64 for later use
+    char* nTitleId = parse_string(titleId);
+    u64 uTitleId = u8_to_u64((u8*)nTitleId, BIG_ENDIAN);
+    free (nTitleId);
+
     // Wait for wifi to be available
     u32 wifi = 0;
-    Result ret;
+    Result ret = 0;
+    Result res = 0;
     while(R_SUCCEEDED(ret = ACU_GetWifiStatus(&wifi)) && wifi == 0)
     {
         hidScanInput();
@@ -256,7 +262,7 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
     // Include region in filename
     if (region.length() > 0)
     {
-        titleName = titleName = " (" + region + ")";
+        titleName = titleName + " (" + region + ")";
     }
 
     std::string mode_text;
@@ -270,18 +276,59 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
 
     printf("Starting - %s\n", titleName.c_str());
 
+    // If in install mode, download/install the SEED entry
+    if (selected_mode == install_direct)
+    {
+        // Download and install the SEEDDB entry if install mode
+        // Code based on code from FBI: https://github.com/Steveice10/FBI/blob/master/source/core/util.c#L254
+        // Copyright (C) 2015 Steveice10
+        u8 seed[16];
+        static const char* regionStrings[] = {"JP", "US", "GB", "GB", "HK", "KR", "TW"};
+        u8 region = CFG_REGION_USA;
+        CFGU_GetSystemLanguage(&region);
+
+        if(region <= CFG_REGION_TWN) {
+            char url[128];
+            snprintf(url, 128, SEED_URL "0x%016llX/ext_key?country=%s", uTitleId, regionStrings[region]);
+
+            httpcContext context;
+            if(R_SUCCEEDED(res = httpcOpenContext(&context, HTTPC_METHOD_GET, url, 1))) {
+                httpcSetSSLOpt(&context, SSLCOPT_DisableVerify);
+
+                u32 responseCode = 0;
+                if(R_SUCCEEDED(res = httpcBeginRequest(&context)) && R_SUCCEEDED(res = httpcGetResponseStatusCode(&context, &responseCode, 0))) {
+                    if(responseCode == 200) {
+                        u32 pos = 0;
+                        u32 bytesRead = 0;
+                        while(pos < sizeof(seed) && (R_SUCCEEDED(res = httpcDownloadData(&context, &seed[pos], sizeof(seed) - pos, &bytesRead)) || (u32)res == HTTPC_RESULTCODE_DOWNLOADPENDING)) {
+                            pos += bytesRead;
+                        }
+                    } else {
+                        res = -1;
+                    }
+                }
+
+                httpcCloseContext(&context);
+            }
+
+            if (R_SUCCEEDED(res))
+            {
+                res = InstallSeed(uTitleId, seed);
+                if (R_FAILED(res))
+                {
+                    printf("Error installing SEEDDB entry: 0x%lx\n", res);
+                }
+            }
+        }
+    }
+
     // Make sure the CIA doesn't already exist
     std::string cp = outputDir + "/" + titleName + ".cia";
-    char *ciaPath = new char[cp.size()+1];
-    ciaPath[cp.size()]=0;
-    memcpy(ciaPath,cp.c_str(),cp.size());
-    if ( (selected_mode == make_cia) && FileExists(ciaPath))
+    if ( (selected_mode == make_cia) && FileExists(cp.c_str()))
     {
-        free(ciaPath);
-        printf("%s/%s.cia already exists.\n", outputDir.c_str(), titleName.c_str());
+        printf("%s already exists.\n", cp.c_str());
         return 0;
     }
-    free(ciaPath);
 
     std::ofstream ofs;
 
@@ -291,7 +338,7 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
         printf("Error opening %s/tmp/tmd\n", outputDir.c_str());
         return -1;
     }
-    Result res = DownloadFile((NUS_URL + titleId + "/tmd").c_str(), oh, false);
+    res = DownloadFile((NUS_URL + titleId + "/tmd").c_str(), oh, false);
     fclose(oh);
     if (res != 0)
     {
@@ -299,50 +346,7 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
         return res;
     }
 
-// Commented out as the InstallSeed call doesn't currently work
-    // Download and install the SEEDDB entry if install mode
-/*
-    if (selected_mode == install_direct)
-    {
-        u8 seed[16];
-        static const char* regionStrings[] = {"JP", "US", "GB", "GB", "HK", "KR", "TW"};
-        u8 region = CFG_REGION_USA;
-        CFGU_GetSystemLanguage(&region);
-
-        char url[128];
-        snprintf(url, 128, SEED_URL "0x%s/ext_key?country=%s", titleId.c_str(), regionStrings[region]);
-
-        httpcContext context;
-        if(R_SUCCEEDED(res = httpcOpenContext(&context, HTTPC_METHOD_GET, url, 1))) {
-            httpcSetSSLOpt(&context, SSLCOPT_DisableVerify);
-
-            u32 responseCode = 0;
-            if(R_SUCCEEDED(res = httpcBeginRequest(&context)) && R_SUCCEEDED(res = httpcGetResponseStatusCode(&context, &responseCode, 0))) {
-                if(responseCode == 200) {
-                    u32 pos = 0;
-                    u32 bytesRead = 0;
-                    while(pos < sizeof(seed) && (R_SUCCEEDED(res = httpcDownloadData(&context, &seed[pos], sizeof(seed) - pos, &bytesRead)) || (u32)res == HTTPC_RESULTCODE_DOWNLOADPENDING)) {
-                        pos += bytesRead;
-                    }
-                } else {
-                    res = -1;
-                }
-            }
-
-            httpcCloseContext(&context);
-        }
-
-        char* nTitleId = parse_string(titleId);
-        u64 uTitleId = u8_to_u64((u8*)nTitleId, BIG_ENDIAN);
-        free (nTitleId);
-
-        if(R_SUCCEEDED(res)) {
-            Result res2 = InstallSeed(uTitleId, seed);
-        }
-    }
-*/
-
-    //read version
+    // Read version
     std::ifstream tmdfs;
     tmdfs.open(outputDir + "/tmp/tmd", std::ofstream::out | std::ofstream::in | std::ofstream::binary);
     char titleVersion[2];
