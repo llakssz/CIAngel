@@ -278,7 +278,7 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
     printf("Starting - %s\n", titleName.c_str());
 
     // If in install mode, download/install the SEED entry
-    if (selected_mode == install_direct)
+    if (config.GetMode() == CConfig::Mode::INSTALL_CIA)
     {
         // Download and install the SEEDDB entry if install mode
         // Code based on code from FBI: https://github.com/Steveice10/FBI/blob/master/source/core/util.c#L254

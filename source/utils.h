@@ -57,7 +57,7 @@ int TruncateFile_u64(char *filename, u64 filelen);
 int fseek_64(FILE *fp, u64 file_pos, int whence);
 int makedir(const char* dir);
 char *getcwdir(char *buffer,int maxlen);
-bool FileExists (char *name);
+bool FileExists (const char *name);
 Result DownloadFile(const char *url, FILE *os, bool bProgress);
 Result DownloadFileInstall(const char *url, Handle *handle, u32* offset);
 Result InstallSeed(u64 titleId, const void* seed);

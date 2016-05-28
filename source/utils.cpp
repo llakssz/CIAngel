@@ -273,7 +273,7 @@ return getcwd(buffer,maxlen);
 #endif
 }
 
-bool FileExists (char *name){
+bool FileExists (const char *name){
     struct stat buffer;
     return (stat (name, &buffer) == 0);
 }
