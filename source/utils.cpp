@@ -24,6 +24,7 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <sys/time.h>
 
 //MISC
 void char_to_int_array(unsigned char destination[], char source[], int size, int endianness, int base)
@@ -117,26 +118,64 @@ void resolve_flag_u16(u16 flag, unsigned char *flag_bool)
 }
 
 //IO Related
-void PrintProgress(u32 nSize, u32 nCurrent)
+int diff_ms(timeval t1, timeval t2)
+{
+    return (((t1.tv_sec - t2.tv_sec) * 1000000) + 
+            (t1.tv_usec - t2.tv_usec))/1000;
+}
+
+void PrintProgress(PrintConsole *console, u32 nSize, u32 nCurrent)
 {
 	// Don't attempt to calculate anything if we don't have a final size
 	if (nSize == 0) return;
 	
+	// Switch to the progress console
+	PrintConsole* currentConsole = consoleSelect(console);
+	consoleClear();
+
+	// Set the start time if nLastSize is 0
+	static u64 nStartTime;
+	if (nCurrent == 0)
+	{
+		nStartTime = osGetTime();
+	}
+
+	// Offset everything by 10 lines to kinda center it
+	printf("\n\n\n\n\n\n\n\n\n\n");
+
 	// Calculate percent and bar width
 	double fPercent = ((double)nCurrent / nSize) * 100.0;
 	u16 barDrawWidth = (fPercent / 100) * 40;
 
 	int i = 0;
-	printf("% 3.2f%% ", fPercent);
 	for (i = 0; i < barDrawWidth; i++)
 	{
 		printf("|");
 	}
-	printf("\r");
+	printf("\n");
+
+	// Output current progress
+	printf("   %0.2f / %0.2fMB  % 3.2f%%\n", ((double)nCurrent) / 1024 / 1024, ((double)nSize) / 1024 / 1024, fPercent);
+
+	// Calculate download speed
+	if (nCurrent > 0)
+	{
+		u64 nTime = osGetTime();
+		double seconds = ((double)(nTime - nStartTime)) / 1000;
+
+		if (seconds > 0)
+		{
+			double speed = ((nCurrent / seconds) / 1024);
+			printf("   Avg Speed: %.02f KB/s\n", speed);
+		}
+	}
 
 	// Make sure the screen updates
     gfxFlushBuffers();
     gspWaitForVBlank();
+
+    // Switch back to the original console
+    consoleSelect(currentConsole);
 }
 
 void WriteBuffer(void *buffer, u64 size, u64 offset, FILE *output)
@@ -265,9 +304,20 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
     Result ret = 0;
     Result dlret = HTTPC_RESULTCODE_DOWNLOADPENDING;
     u32 status;
-    u32 bufSize = 0x100000;
+    u32 bufSize = 1024 * 256;
     u32 readSize = 0;
     httpcOpenContext(&context, HTTPC_METHOD_GET, (char*)url, 1);
+    httpcSetSSLOpt(&context, SSLCOPT_DisableVerify);
+
+    // If we're showing progress, set up a console on the bottom screen
+    GSPGPU_FramebufferFormats infoOldFormat = gfxGetScreenFormat(GFX_BOTTOM);
+    PrintConsole infoConsole;
+    if (bProgress)
+    {
+	    PrintConsole* currentConsole = consoleSelect(&infoConsole);
+	    consoleInit(GFX_BOTTOM, &infoConsole);
+	    consoleSelect(currentConsole);
+    }
 
     ret = httpcBeginRequest(&context);
     if (ret != 0) goto _out;
@@ -293,6 +343,12 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
             goto _out;
         }
 
+        // Initialize the Progress bar if we're showing one
+        if (bProgress)
+        {
+            PrintProgress(&infoConsole, fileSize, procSize);
+        }
+
         while (dlret == (s32)HTTPC_RESULTCODE_DOWNLOADPENDING)
         {
         	// Check if the app is closing
@@ -300,6 +356,15 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
         		ret = -1;
         		break;
         	}
+
+            // Check if the user has pressed B, and cancel if so
+            hidScanInput();
+            u32 keys = hidKeysDown();
+            if (keys & KEY_B)
+            {
+                ret = -1;
+                break;
+            }
 
             memset(buffer, 0, bufSize);
 
@@ -309,7 +374,7 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
             procSize += readSize;
             if (bProgress)
             {
-            	PrintProgress(fileSize, procSize);
+                PrintProgress(&infoConsole, fileSize, procSize);
             }
         }
 
@@ -319,169 +384,18 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
 _out:
     httpcCloseContext(&context);
 
+    // If showing progress, restore the bottom screen
+    if (bProgress)
+    {
+        gfxSetScreenFormat(GFX_BOTTOM, infoOldFormat);
+    }
+
     return ret;
-}
-
-Result DownloadFileSecure_Internal(const char *hostname, const char* request, void *out, bool bProgress,
-							 void (*write)(void* out, unsigned char* buffer, u32 readSize))
-{
-    Result ret=0;
-
-    struct addrinfo hints;
-    struct addrinfo *resaddr = NULL, *resaddr_cur;
-    int sockfd;
-    u8 *readbuf = (u8 *)linearAlloc(0x400);
-
-    sslcContext sslc_context;
-    //u32 RootCertChain_contexthandle=0;
-
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(sockfd==-1)
-    {
-        printf("Failed to create the socket.\n");
-        return -1;
-    }
-
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-
-    if(getaddrinfo(hostname, "443", &hints, &resaddr)!=0)
-    {
-        printf("getaddrinfo() failed.\n");
-        closesocket(sockfd);
-        return -1;
-    }
-
-    for(resaddr_cur = resaddr; resaddr_cur!=NULL; resaddr_cur = resaddr_cur->ai_next)
-    {
-        if(connect(sockfd, resaddr_cur->ai_addr, resaddr_cur->ai_addrlen)==0)break;
-    }
-
-    freeaddrinfo(resaddr);
-
-    if(resaddr_cur==NULL)
-    {
-        printf("Failed to connect.\n");
-        closesocket(sockfd);
-        return -1;
-    }
-
-    /*ret = sslcCreateRootCertChain(&RootCertChain_contexthandle);
-    if(R_FAILED(ret))
-    {
-        printf("sslcCreateRootCertChain() failed: 0x%08x.\n", (unsigned int)ret);
-        closesocket(sockfd);
-        return ret;
-    }
-
-    ret = sslcAddTrustedRootCA(RootCertChain_contexthandle, (u8*)builtin_rootca_bin, builtin_rootca_bin_len, NULL);
-    if(R_FAILED(ret))
-    {
-        printf("sslcAddTrustedRootCA() failed: 0x%08x.\n", (unsigned int)ret);
-        closesocket(sockfd);
-        sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        return ret;
-    }*/
-
-    // For the life of me can't get the 3DS to accept a Let's Encrypt cert, so for now don't verify
-    ret = sslcCreateContext(&sslc_context, sockfd, SSLCOPT_Default | SSLCOPT_DisableVerify, (char*)hostname);
-    if(R_FAILED(ret))
-    {
-        printf("sslcCreateContext() failed: 0x%08x.\n", (unsigned int)ret);
-        closesocket(sockfd);
-        //sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        return ret;
-    }
-
-    /*ret = sslcContextSetRootCertChain(&sslc_context, RootCertChain_contexthandle);
-    if(R_FAILED(ret))
-    {
-        printf("sslcContextSetRootCertChain() failed: 0x%08x.\n", (unsigned int)ret);
-        sslcDestroyContext(&sslc_context);
-        sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        closesocket(sockfd);
-        return ret;
-    }*/
-
-    ret = sslcStartConnection(&sslc_context, NULL, NULL);
-    if(R_FAILED(ret))
-    {
-        printf("sslcStartConnection() failed: 0x%08x.\n", (unsigned int)ret);
-        sslcDestroyContext(&sslc_context);
-        //sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        closesocket(sockfd);
-        return ret;
-    }
-
-    ret = sslcWrite(&sslc_context, (u8*)request, strlen(request));
-    if(R_FAILED(ret))
-    {
-        printf("sslcWrite() failed: 0x%08x.\n", (unsigned int)ret);
-        sslcDestroyContext(&sslc_context);
-        //sslcDestroyRootCertChain(RootCertChain_contexthandle);
-        closesocket(sockfd);
-        return ret;
-    }
-
-    memset(readbuf, 0, 0x400);
-
-    bool bHeaderEnded = false;
-    while ((ret = sslcRead(&sslc_context, readbuf, 0x400-1, false)) > 0)
-    {
-        if(R_FAILED(ret))
-        {
-            printf("sslcWrite() failed: 0x%08x.\n", (unsigned int)ret);
-            sslcDestroyContext(&sslc_context);
-            //sslcDestroyRootCertChain(RootCertChain_contexthandle);
-            closesocket(sockfd);
-            return ret;
-        }
-
-        if (!bHeaderEnded)
-        {
-        	// Skip over the header, we don't really care about its contents.
-        	// Technically there's a very slim chance this fails to find the header
-        	char* headend = strstr((const char*)readbuf, "\r\n\r\n");
-        	if (headend != NULL)
-        	{
-        		int headlen = (headend - (char*)readbuf) + 4;
-        		write(out, (u8*)(headend + 4), (ret - headlen));
-        		bHeaderEnded = true;
-        	}
-        }
-        else
-        {
-        	write(out, readbuf, ret);
-        }
-    }
-    
-    sslcDestroyContext(&sslc_context);
-    //sslcDestroyRootCertChain(RootCertChain_contexthandle);
-    
-    closesocket(sockfd);
-
-    return 0;
 }
 
 Result DownloadFile(const char *url, FILE *os, bool bProgress)
 {
-	if (strlen(url) > 5 && strstr(url, "https:") != NULL)
-	{
-		// For HTTPS, we assume a properly formatted URL
-		std::string sUrl = url;
-		int nHostEnd = sUrl.find("/", 8);
-		std::string sPath = sUrl.substr(nHostEnd);
-		std::string sHost = sUrl.substr(8, nHostEnd - 8);
-		// I am so sorry for HTTP/1.0, but I can't be bothered to write chunked data handling right now
-	    std::string sRequest = "GET " + sPath + " HTTP/1.0\r\nUser-Agent: CIAngel\r\nConnection: close\r\nHost: " + sHost + "\r\n\r\n";
-
-		return DownloadFileSecure_Internal(sHost.c_str(), sRequest.c_str(), os, bProgress, DownloadFile_InternalSave);
-	}
-	else
-	{
-		return DownloadFile_Internal(url, os, bProgress, DownloadFile_InternalSave);
-	}
+	return DownloadFile_Internal(url, os, bProgress, DownloadFile_InternalSave);
 }
 
 // This function DOES NOT support HTTPS
@@ -784,4 +698,40 @@ bool check_JSON() {
     }
 
     return true;
+}
+
+std::string GetSerialType(std::string sSerial)
+{
+    std::string sType = "Unknown";
+    if (sSerial.substr(0, 3) == "TWL")
+    {
+        sType = "DSiWare";
+    }
+    else
+    {
+        switch (sSerial.c_str()[4])
+        {
+            case 'N':
+            case 'P':
+                sType = "Game";
+                break;
+            case 'T':
+                sType = "Demo";
+                break;
+            case 'U':
+                sType = "Update";
+                break;
+            case 'M':
+                sType = "DLC";
+                break;
+        }
+    }
+
+    return sType;
+}
+
+std::string upperCase(std::string input) {
+  for (std::string::iterator it = input.begin(); it != input.end(); ++ it)
+    *it = toupper(*it);
+  return input;
 }

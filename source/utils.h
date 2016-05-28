@@ -20,13 +20,20 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 
 #define NUS_URL "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/"
 #define SEED_URL "https://kagiya-ctr.cdn.nintendo.net/title/"
-#define JSON_URL "https://3ds.titlekeys.com/json"
+#define JSON_URL "https://3ds.titlekeys.com/json_enc"
 
 // Check for updates every 3 days automatically?
 #define JSON_UPDATE_INTERVAL_IN_SECONDS (60 * 60 * 24 * 3)
 
 #define JSON_TYPE_WINGS 1
 #define JSON_TYPE_ONLINE 2
+
+// C++ only code
+#ifdef __cplusplus
+#include <string>
+std::string GetSerialType(std::string sSerial);
+std::string upperCase(std::string input);
+#endif
 
 //MISC
 #ifdef __cplusplus
@@ -42,7 +49,7 @@ void resolve_flag_u16(u16 flag, unsigned char *flag_bool);
 bool download_JSON();
 bool check_JSON();
 //IO Related
-void PrintProgress(u32 nSize, u32 nCurrent);
+void PrintProgress(PrintConsole *console, u32 nSize, u32 nCurrent);
 void WriteBuffer(void *buffer, u64 size, u64 offset, FILE *output);
 void write_align_padding(FILE *output, size_t alignment);
 u64 GetFileSize_u64(char *filename);

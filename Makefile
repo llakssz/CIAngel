@@ -29,7 +29,7 @@ EXTRA_OUTPUT_FILES :=
 LIBRARY_DIRS := $(DEVKITPRO)/libctru
 LIBRARIES := ctru m hbkb
 
-BUILD_FLAGS := -DVERSION_STRING="\"`git describe --tags --abbrev=0`\""
+BUILD_FLAGS := -DVERSION_STRING="\"`git describe --tags --abbrev=0`\"" -DREVISION_STRING="\"`git rev-parse --short HEAD`\""
 RUN_FLAGS :=
 
 # 3DS CONFIGURATION #
