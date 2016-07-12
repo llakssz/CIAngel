@@ -27,7 +27,7 @@ BUILD_FILTER := source/svchax/test/test.c
 EXTRA_OUTPUT_FILES :=
 
 LIBRARY_DIRS := $(DEVKITPRO)/libctru
-LIBRARIES := ctru m hbkb
+LIBRARIES := ctru m
 
 BUILD_FLAGS := -DVERSION_STRING="\"`git describe --tags --abbrev=0`\"" -DREVISION_STRING="\"`git rev-parse --short HEAD`\""
 RUN_FLAGS :=

@@ -21,7 +21,6 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <hbkb.h>
 
 #include <3ds.h>
 
@@ -409,58 +408,6 @@ void ProcessGameQueue()
     wait_key_specific("Press A to continue.\n", KEY_A);
 }
 
-std::string getInput(HB_Keyboard* sHBKB, bool &bCancelled)
-{
-    sHBKB->HBKB_Clean();
-    touchPosition touch;
-    u8 KBState = 4;
-    std::string input;
-    while (KBState != 1 || input.length() == 0)
-    {
-        if (!aptMainLoop())
-        {
-            bCancelled = true;
-            break;
-        }
-
-        hidScanInput();
-        hidTouchRead(&touch);
-        KBState = sHBKB->HBKB_CallKeyboard(touch);
-        input = sHBKB->HBKB_CheckKeyboardInput();
-
-        // If the user cancelled the input
-        if (KBState == 3)
-        {
-            bCancelled = true;
-            break;
-        }
-        // Otherwise if the user has entered a key
-        else if (KBState != 4)
-        {
-            printf("%c[2K\r", 27);
-
-            // If input string is > 50 characters, show just the right hand side
-            if (input.length() > 49)
-            {
-                printf("%s", input.substr(input.length() - 49).c_str());
-            }
-            else
-            {
-                printf("%s", input.c_str());
-            }
-        }
-
-        // Flush and swap framebuffers
-        gfxFlushBuffers();
-        gfxSwapBuffers();
-
-        //Wait for VBlank
-        gspWaitForVBlank();
-    }
-    printf("\n");
-    return input;
-}
-
 void removeForbiddenChar(std::string* s)
 {
     std::string::iterator it;
@@ -633,17 +580,21 @@ bool search_by_serial(std::string &searchString, Json::Value &gameData, int &out
 /* Menu Action Functions */
 void action_search(bool (*match)(std::string &searchString, Json::Value &gameData, int &outScore))
 {
-    HB_Keyboard sHBKB;
-    bool bKBCancelled = false;
+    SwkbdState swkbd;
 
     consoleClear();
-
     printf("Please enter text to search for:\n");
-    std::string searchString = getInput(&sHBKB, bKBCancelled);
-    if (bKBCancelled)
+		
+		swkbdInit(&swkbd, SWKBD_TYPE_NORMAL, 2, -1);
+		swkbdSetValidation(&swkbd, SWKBD_NOTEMPTY_NOTBLANK, 0, 0);
+		swkbdSetHintText(&swkbd, "Please enter text to search for");
+		char textBuf[255];
+		if (swkbdInputText(&swkbd, textBuf, sizeof(textBuf)) != SWKBD_BUTTON_CONFIRM)
     {
         return;
     }
+    std::string searchString(textBuf);
+    
 
     // User has entered their input, so let's scrap the keyboard
     clear_screen(GFX_BOTTOM);
@@ -795,8 +746,14 @@ void action_prompt_queue()
 
 void action_manual_entry()
 {
-    HB_Keyboard sHBKB;
-    bool bKBCancelled = false;
+    SwkbdState swkbd;
+    swkbdInit(&swkbd, SWKBD_TYPE_NORMAL, 2, -1);
+    swkbdSetValidation(&swkbd, SWKBD_NOTEMPTY_NOTBLANK, 0, 0);
+    char textBuf[255];
+    if (swkbdInputText(&swkbd, textBuf, sizeof(textBuf)) != SWKBD_BUTTON_CONFIRM)
+    {
+        return;
+    }
 
     consoleClear();
 
@@ -804,12 +761,13 @@ void action_manual_entry()
     while(true)
     {
         printf("Please enter a titleID:\n");
-        std::string titleId = getInput(&sHBKB, bKBCancelled);
-        std::string key;
-        if (bKBCancelled)
+        swkbdSetHintText(&swkbd, "Please enter a titleID");
+        if (swkbdInputText(&swkbd, textBuf, sizeof(textBuf)) != SWKBD_BUTTON_CONFIRM)
         {
             break;
         }
+        std::string titleId(textBuf);
+        std::string key;
 
         for (unsigned int i = 0; i < sourceData.size(); i++){
             std::string tempId = sourceData[i]["titleid"].asString();
@@ -823,11 +781,12 @@ void action_manual_entry()
         }
         if(key.length() != 32) {
             printf("Please enter the corresponding encTitleKey:\n");
-            key = getInput(&sHBKB, bKBCancelled);
-            if (bKBCancelled)
+            swkbdSetHintText(&swkbd, "Please enter the corresponding encTitleKey");
+            if (swkbdInputText(&swkbd, textBuf, sizeof(textBuf)) != SWKBD_BUTTON_CONFIRM)
             {
                 break;
             }
+            key.assign(textBuf, sizeof(textBuf));
         }
         if (titleId.length() == 16 && key.length() == 32)
         {
@@ -923,7 +882,8 @@ void action_about()
     printf("latest games has never been so easy.\n\n");
 
     printf("Contributors: Cearp, Drakia, superbudvar,\n");
-    printf("              mysamdog, cerea1killer\n");
+    printf("              mysamdog, cerea1killer,\n");
+    printf("              DanTheMan827\n");
 
     printf("\n\nCommit: " REVISION_STRING "\n\n");
 
