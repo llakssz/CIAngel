@@ -39,6 +39,7 @@
 static const u16 top = 0x140;
 static bool bSvcHaxAvailable = true;
 static bool bExit = false;
+static bool bRedoSearch = false;
 int sourceDataType;
 Json::Value sourceData;
 
@@ -549,8 +550,11 @@ bool menu_search_keypress(int selected, u32 key, void* data)
         }
 
         printf("Queue size: %d\n", game_queue.size());
-        wait_key_specific("\nPress A to continue.\n", KEY_A);
 
+        if(wait_key_specific("\nPress A to continue.\nPress B to go back to the list.\n", KEY_A | KEY_B) & KEY_B)
+        {
+            bRedoSearch = true;
+        }
         return true;
     }
 
@@ -595,6 +599,10 @@ void action_search(bool (*match)(std::string &searchString, Json::Value &gameDat
     }
     std::string searchString(textBuf);
     
+    do
+    {
+    
+    bRedoSearch = false;
 
     // User has entered their input, so let's scrap the keyboard
     clear_screen(GFX_BOTTOM);
@@ -696,6 +704,8 @@ void action_search(bool (*match)(std::string &searchString, Json::Value &gameDat
     sprintf(header, "Select a Title (found %i results)", display_amount);
     sprintf(footer, "Press A to %s. Press X to queue.", mode_text.c_str());
     titles_multkey_draw(header, footer, 1, &display_output, &display_output, menu_search_keypress);
+    
+    } while(bRedoSearch == true);
 }
 
 void action_prompt_queue()
