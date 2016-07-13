@@ -601,110 +601,110 @@ void action_search(bool (*match)(std::string &searchString, Json::Value &gameDat
     
     do
     {
-    
-    bRedoSearch = false;
+        
+        bRedoSearch = false;
 
-    // User has entered their input, so let's scrap the keyboard
-    clear_screen(GFX_BOTTOM);
+        // User has entered their input, so let's scrap the keyboard
+        clear_screen(GFX_BOTTOM);
 
-    std::vector<game_item> display_output;
-    int outScore;
-    
-    for (unsigned int i = 0; i < sourceData.size(); i++) {
-        // Check the region filter
-        std::string regionFilter = config.GetRegionFilter();
-        if(regionFilter != "off" && sourceData[i]["region"].asString() != regionFilter) {
-            continue;
-        }
-
-        // Check that the encTitleKey isn't null
-        if (sourceData[i]["encTitleKey"].isNull())
-        {
-            continue;
-        }
-
-        // Create an ASCII version of the name if one doesn't exist yet
-        if (sourceData[i]["ascii_name"].isNull())
-        {
-            // Normalize the name down to ASCII
-            utf8proc_option_t options = (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_DECOMPOSE | UTF8PROC_COMPAT | UTF8PROC_STRIPMARK | UTF8PROC_STRIPCC);
-            utf8proc_uint8_t* szName;
-            utf8proc_uint8_t *str = (utf8proc_uint8_t*)sourceData[i]["name"].asCString();
-            utf8proc_map(str, 0, &szName, options);
-
-            sourceData[i]["ascii_name"] = (const char*)szName;
-
-            free(szName);
-        }
-
-        if (match(searchString, sourceData[i], outScore))
-        {
-
-            game_item item;
-            item.score = outScore;
-            item.index = i;
-
-            switch(sourceDataType) {
-            case JSON_TYPE_WINGS:
-              item.titleid = sourceData[i]["titleid"].asString();
-              item.titlekey = sourceData[i]["enckey"].asString();
-              item.name = sourceData[i]["ascii_name"].asString();
-              item.region = sourceData[i]["region"].asString();
-              item.code = sourceData[i]["code"].asString();
-              break;
-            case JSON_TYPE_ONLINE:
-              item.titleid = sourceData[i]["titleID"].asString();
-              item.titlekey = sourceData[i]["encTitleKey"].asString();
-              item.name = sourceData[i]["ascii_name"].asString();
-              item.region = sourceData[i]["region"].asString();
-              item.code = sourceData[i]["serial"].asString();
-              break;
+        std::vector<game_item> display_output;
+        int outScore;
+        
+        for (unsigned int i = 0; i < sourceData.size(); i++) {
+            // Check the region filter
+            std::string regionFilter = config.GetRegionFilter();
+            if(regionFilter != "off" && sourceData[i]["region"].asString() != regionFilter) {
+                continue;
             }
 
-            std::string typeCheck = item.titleid.substr(4,4);
-            //if title id belongs to gameapp/dlc/update/dsiware, use it. if not, ignore. case sensitve of course
-            if(typeCheck == "0000" || typeCheck == "008c" || typeCheck == "000e" || typeCheck == "8004"){
-                display_output.push_back(item);
+            // Check that the encTitleKey isn't null
+            if (sourceData[i]["encTitleKey"].isNull())
+            {
+                continue;
+            }
+
+            // Create an ASCII version of the name if one doesn't exist yet
+            if (sourceData[i]["ascii_name"].isNull())
+            {
+                // Normalize the name down to ASCII
+                utf8proc_option_t options = (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_DECOMPOSE | UTF8PROC_COMPAT | UTF8PROC_STRIPMARK | UTF8PROC_STRIPCC);
+                utf8proc_uint8_t* szName;
+                utf8proc_uint8_t *str = (utf8proc_uint8_t*)sourceData[i]["name"].asCString();
+                utf8proc_map(str, 0, &szName, options);
+
+                sourceData[i]["ascii_name"] = (const char*)szName;
+
+                free(szName);
+            }
+
+            if (match(searchString, sourceData[i], outScore))
+            {
+
+                game_item item;
+                item.score = outScore;
+                item.index = i;
+
+                switch(sourceDataType) {
+                case JSON_TYPE_WINGS:
+                  item.titleid = sourceData[i]["titleid"].asString();
+                  item.titlekey = sourceData[i]["enckey"].asString();
+                  item.name = sourceData[i]["ascii_name"].asString();
+                  item.region = sourceData[i]["region"].asString();
+                  item.code = sourceData[i]["code"].asString();
+                  break;
+                case JSON_TYPE_ONLINE:
+                  item.titleid = sourceData[i]["titleID"].asString();
+                  item.titlekey = sourceData[i]["encTitleKey"].asString();
+                  item.name = sourceData[i]["ascii_name"].asString();
+                  item.region = sourceData[i]["region"].asString();
+                  item.code = sourceData[i]["serial"].asString();
+                  break;
+                }
+
+                std::string typeCheck = item.titleid.substr(4,4);
+                //if title id belongs to gameapp/dlc/update/dsiware, use it. if not, ignore. case sensitve of course
+                if(typeCheck == "0000" || typeCheck == "008c" || typeCheck == "000e" || typeCheck == "8004"){
+                    display_output.push_back(item);
+                }
             }
         }
-    }
 
-    unsigned int display_amount = display_output.size();
+        unsigned int display_amount = display_output.size();
 
-    // We technically have 30 rows to work with, minus 2 for header/footer. But stick with 20 entries for now
+        // We technically have 30 rows to work with, minus 2 for header/footer. But stick with 20 entries for now
 
-    if (display_amount == 0)
-    {
-        printf("No matching titles found.\n");
-        wait_key_specific("\nPress A to return.\n", KEY_A);
-        return;
-    }
+        if (display_amount == 0)
+        {
+            printf("No matching titles found.\n");
+            wait_key_specific("\nPress A to return.\n", KEY_A);
+            return;
+        }
 
-    // sort similar names by fuzzy score
-    if(display_amount>1) {
-        std::sort(display_output.begin(), display_output.end(), compareByScore);
-    }
-    
-    std::string mode_text;
-    switch (config.GetMode())
-    {
-        case CConfig::Mode::DOWNLOAD_CIA:
-            mode_text = "Create CIA";
-        break;
-        case CConfig::Mode::INSTALL_CIA:
-            mode_text = "Install CIA";
-        break;
-        case CConfig::Mode::INSTALL_TICKET:
-            mode_text = "Create Ticket";
-        break;
-    }
-
-    char footer[51];
-    char header[51];
-    sprintf(header, "Select a Title (found %i results)", display_amount);
-    sprintf(footer, "Press A to %s. Press X to queue.", mode_text.c_str());
-    titles_multkey_draw(header, footer, 1, &display_output, &display_output, menu_search_keypress);
-    
+        // sort similar names by fuzzy score
+        if(display_amount>1) {
+            std::sort(display_output.begin(), display_output.end(), compareByScore);
+        }
+        
+        std::string mode_text;
+        switch (config.GetMode())
+        {
+            case CConfig::Mode::DOWNLOAD_CIA:
+                mode_text = "Create CIA";
+            break;
+            case CConfig::Mode::INSTALL_CIA:
+                mode_text = "Install CIA";
+            break;
+            case CConfig::Mode::INSTALL_TICKET:
+                mode_text = "Create Ticket";
+            break;
+        }
+        
+        char footer[51];
+        char header[51];
+        sprintf(header, "Select a Title (found %i results)", display_amount);
+        sprintf(footer, "Press A to %s. Press X to queue.", mode_text.c_str());
+        titles_multkey_draw(header, footer, 1, &display_output, &display_output, menu_search_keypress);
+        
     } while(bRedoSearch == true);
 }
 
