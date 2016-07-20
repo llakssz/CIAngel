@@ -21,7 +21,6 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <hbkb.h>
 
 #include <3ds.h>
 
@@ -40,6 +39,7 @@
 static const u16 top = 0x140;
 static bool bSvcHaxAvailable = true;
 static bool bExit = false;
+static bool bRedoSearch = false;
 int sourceDataType;
 Json::Value sourceData;
 
@@ -409,58 +409,6 @@ void ProcessGameQueue()
     wait_key_specific("Press A to continue.\n", KEY_A);
 }
 
-std::string getInput(HB_Keyboard* sHBKB, bool &bCancelled)
-{
-    sHBKB->HBKB_Clean();
-    touchPosition touch;
-    u8 KBState = 4;
-    std::string input;
-    while (KBState != 1 || input.length() == 0)
-    {
-        if (!aptMainLoop())
-        {
-            bCancelled = true;
-            break;
-        }
-
-        hidScanInput();
-        hidTouchRead(&touch);
-        KBState = sHBKB->HBKB_CallKeyboard(touch);
-        input = sHBKB->HBKB_CheckKeyboardInput();
-
-        // If the user cancelled the input
-        if (KBState == 3)
-        {
-            bCancelled = true;
-            break;
-        }
-        // Otherwise if the user has entered a key
-        else if (KBState != 4)
-        {
-            printf("%c[2K\r", 27);
-
-            // If input string is > 50 characters, show just the right hand side
-            if (input.length() > 49)
-            {
-                printf("%s", input.substr(input.length() - 49).c_str());
-            }
-            else
-            {
-                printf("%s", input.c_str());
-            }
-        }
-
-        // Flush and swap framebuffers
-        gfxFlushBuffers();
-        gfxSwapBuffers();
-
-        //Wait for VBlank
-        gspWaitForVBlank();
-    }
-    printf("\n");
-    return input;
-}
-
 void removeForbiddenChar(std::string* s)
 {
     std::string::iterator it;
@@ -602,8 +550,11 @@ bool menu_search_keypress(int selected, u32 key, void* data)
         }
 
         printf("Queue size: %d\n", game_queue.size());
-        wait_key_specific("\nPress A to continue.\n", KEY_A);
 
+        if(wait_key_specific("\nPress A to continue.\nPress B to go back to the list.\n", KEY_A | KEY_B) & KEY_B)
+        {
+            bRedoSearch = true;
+        }
         return true;
     }
 
@@ -633,118 +584,128 @@ bool search_by_serial(std::string &searchString, Json::Value &gameData, int &out
 /* Menu Action Functions */
 void action_search(bool (*match)(std::string &searchString, Json::Value &gameData, int &outScore))
 {
-    HB_Keyboard sHBKB;
-    bool bKBCancelled = false;
+    SwkbdState swkbd;
 
     consoleClear();
-
     printf("Please enter text to search for:\n");
-    std::string searchString = getInput(&sHBKB, bKBCancelled);
-    if (bKBCancelled)
+		
+		swkbdInit(&swkbd, SWKBD_TYPE_NORMAL, 2, -1);
+		swkbdSetValidation(&swkbd, SWKBD_NOTEMPTY_NOTBLANK, 0, 0);
+		swkbdSetHintText(&swkbd, "Please enter text to search for");
+		char textBuf[255];
+		if (swkbdInputText(&swkbd, textBuf, sizeof(textBuf)) != SWKBD_BUTTON_CONFIRM)
     {
         return;
     }
-
-    // User has entered their input, so let's scrap the keyboard
-    clear_screen(GFX_BOTTOM);
-
-    std::vector<game_item> display_output;
-    int outScore;
+    std::string searchString(textBuf);
     
-    for (unsigned int i = 0; i < sourceData.size(); i++) {
-        // Check the region filter
-        std::string regionFilter = config.GetRegionFilter();
-        if(regionFilter != "off" && sourceData[i]["region"].asString() != regionFilter) {
-            continue;
-        }
+    do
+    {
+        
+        bRedoSearch = false;
 
-        // Check that the encTitleKey isn't null
-        if (sourceData[i]["encTitleKey"].isNull())
-        {
-            continue;
-        }
+        // User has entered their input, so let's scrap the keyboard
+        clear_screen(GFX_BOTTOM);
 
-        // Create an ASCII version of the name if one doesn't exist yet
-        if (sourceData[i]["ascii_name"].isNull())
-        {
-            // Normalize the name down to ASCII
-            utf8proc_option_t options = (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_DECOMPOSE | UTF8PROC_COMPAT | UTF8PROC_STRIPMARK | UTF8PROC_STRIPCC);
-            utf8proc_uint8_t* szName;
-            utf8proc_uint8_t *str = (utf8proc_uint8_t*)sourceData[i]["name"].asCString();
-            utf8proc_map(str, 0, &szName, options);
-
-            sourceData[i]["ascii_name"] = (const char*)szName;
-
-            free(szName);
-        }
-
-        if (match(searchString, sourceData[i], outScore))
-        {
-
-            game_item item;
-            item.score = outScore;
-            item.index = i;
-
-            switch(sourceDataType) {
-            case JSON_TYPE_WINGS:
-              item.titleid = sourceData[i]["titleid"].asString();
-              item.titlekey = sourceData[i]["enckey"].asString();
-              item.name = sourceData[i]["ascii_name"].asString();
-              item.region = sourceData[i]["region"].asString();
-              item.code = sourceData[i]["code"].asString();
-              break;
-            case JSON_TYPE_ONLINE:
-              item.titleid = sourceData[i]["titleID"].asString();
-              item.titlekey = sourceData[i]["encTitleKey"].asString();
-              item.name = sourceData[i]["ascii_name"].asString();
-              item.region = sourceData[i]["region"].asString();
-              item.code = sourceData[i]["serial"].asString();
-              break;
+        std::vector<game_item> display_output;
+        int outScore;
+        
+        for (unsigned int i = 0; i < sourceData.size(); i++) {
+            // Check the region filter
+            std::string regionFilter = config.GetRegionFilter();
+            if(regionFilter != "off" && sourceData[i]["region"].asString() != regionFilter) {
+                continue;
             }
 
-            std::string typeCheck = item.titleid.substr(4,4);
-            //if title id belongs to gameapp/dlc/update/dsiware, use it. if not, ignore. case sensitve of course
-            if(typeCheck == "0000" || typeCheck == "008c" || typeCheck == "000e" || typeCheck == "8004"){
-                display_output.push_back(item);
+            // Check that the encTitleKey isn't null
+            if (sourceData[i]["encTitleKey"].isNull())
+            {
+                continue;
+            }
+
+            // Create an ASCII version of the name if one doesn't exist yet
+            if (sourceData[i]["ascii_name"].isNull())
+            {
+                // Normalize the name down to ASCII
+                utf8proc_option_t options = (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_DECOMPOSE | UTF8PROC_COMPAT | UTF8PROC_STRIPMARK | UTF8PROC_STRIPCC);
+                utf8proc_uint8_t* szName;
+                utf8proc_uint8_t *str = (utf8proc_uint8_t*)sourceData[i]["name"].asCString();
+                utf8proc_map(str, 0, &szName, options);
+
+                sourceData[i]["ascii_name"] = (const char*)szName;
+
+                free(szName);
+            }
+
+            if (match(searchString, sourceData[i], outScore))
+            {
+
+                game_item item;
+                item.score = outScore;
+                item.index = i;
+
+                switch(sourceDataType) {
+                case JSON_TYPE_WINGS:
+                  item.titleid = sourceData[i]["titleid"].asString();
+                  item.titlekey = sourceData[i]["enckey"].asString();
+                  item.name = sourceData[i]["ascii_name"].asString();
+                  item.region = sourceData[i]["region"].asString();
+                  item.code = sourceData[i]["code"].asString();
+                  break;
+                case JSON_TYPE_ONLINE:
+                  item.titleid = sourceData[i]["titleID"].asString();
+                  item.titlekey = sourceData[i]["encTitleKey"].asString();
+                  item.name = sourceData[i]["ascii_name"].asString();
+                  item.region = sourceData[i]["region"].asString();
+                  item.code = sourceData[i]["serial"].asString();
+                  break;
+                }
+
+                std::string typeCheck = item.titleid.substr(4,4);
+                //if title id belongs to gameapp/dlc/update/dsiware, use it. if not, ignore. case sensitve of course
+                if(typeCheck == "0000" || typeCheck == "008c" || typeCheck == "000e" || typeCheck == "8004"){
+                    display_output.push_back(item);
+                }
             }
         }
-    }
 
-    unsigned int display_amount = display_output.size();
+        unsigned int display_amount = display_output.size();
 
-    // We technically have 30 rows to work with, minus 2 for header/footer. But stick with 20 entries for now
+        // We technically have 30 rows to work with, minus 2 for header/footer. But stick with 20 entries for now
 
-    if (display_amount == 0)
-    {
-        printf("No matching titles found.\n");
-        wait_key_specific("\nPress A to return.\n", KEY_A);
-        return;
-    }
+        if (display_amount == 0)
+        {
+            printf("No matching titles found.\n");
+            wait_key_specific("\nPress A to return.\n", KEY_A);
+            return;
+        }
 
-    // sort similar names by fuzzy score
-    if(display_amount>1) {
-        std::sort(display_output.begin(), display_output.end(), compareByScore);
-    }
-    
-    std::string mode_text;
-    switch (config.GetMode())
-    {
-        case CConfig::Mode::DOWNLOAD_CIA:
-            mode_text = "Create CIA";
-        break;
-        case CConfig::Mode::INSTALL_CIA:
-            mode_text = "Install CIA";
-        break;
-        case CConfig::Mode::INSTALL_TICKET:
-            mode_text = "Create Ticket";
-        break;
-    }
-
-    char footer[51];
-    char header[51];
-    sprintf(header, "Select a Title (found %i results)", display_amount);
-    sprintf(footer, "Press A to %s. Press X to queue.", mode_text.c_str());
-    titles_multkey_draw(header, footer, 1, &display_output, &display_output, menu_search_keypress);
+        // sort similar names by fuzzy score
+        if(display_amount>1) {
+            std::sort(display_output.begin(), display_output.end(), compareByScore);
+        }
+        
+        std::string mode_text;
+        switch (config.GetMode())
+        {
+            case CConfig::Mode::DOWNLOAD_CIA:
+                mode_text = "Create CIA";
+            break;
+            case CConfig::Mode::INSTALL_CIA:
+                mode_text = "Install CIA";
+            break;
+            case CConfig::Mode::INSTALL_TICKET:
+                mode_text = "Create Ticket";
+            break;
+        }
+        
+        char footer[51];
+        char header[51];
+        sprintf(header, "Select a Title (found %i results)", display_amount);
+        sprintf(footer, "Press A to %s. Press X to queue.", mode_text.c_str());
+        titles_multkey_draw(header, footer, 1, &display_output, &display_output, menu_search_keypress);
+        
+    } while(bRedoSearch == true);
 }
 
 void action_prompt_queue()
@@ -795,8 +756,14 @@ void action_prompt_queue()
 
 void action_manual_entry()
 {
-    HB_Keyboard sHBKB;
-    bool bKBCancelled = false;
+    SwkbdState swkbd;
+    swkbdInit(&swkbd, SWKBD_TYPE_NORMAL, 2, -1);
+    swkbdSetValidation(&swkbd, SWKBD_NOTEMPTY_NOTBLANK, 0, 0);
+    char textBuf[255];
+    if (swkbdInputText(&swkbd, textBuf, sizeof(textBuf)) != SWKBD_BUTTON_CONFIRM)
+    {
+        return;
+    }
 
     consoleClear();
 
@@ -804,12 +771,13 @@ void action_manual_entry()
     while(true)
     {
         printf("Please enter a titleID:\n");
-        std::string titleId = getInput(&sHBKB, bKBCancelled);
-        std::string key;
-        if (bKBCancelled)
+        swkbdSetHintText(&swkbd, "Please enter a titleID");
+        if (swkbdInputText(&swkbd, textBuf, sizeof(textBuf)) != SWKBD_BUTTON_CONFIRM)
         {
             break;
         }
+        std::string titleId(textBuf);
+        std::string key;
 
         for (unsigned int i = 0; i < sourceData.size(); i++){
             std::string tempId = sourceData[i]["titleid"].asString();
@@ -823,11 +791,12 @@ void action_manual_entry()
         }
         if(key.length() != 32) {
             printf("Please enter the corresponding encTitleKey:\n");
-            key = getInput(&sHBKB, bKBCancelled);
-            if (bKBCancelled)
+            swkbdSetHintText(&swkbd, "Please enter the corresponding encTitleKey");
+            if (swkbdInputText(&swkbd, textBuf, sizeof(textBuf)) != SWKBD_BUTTON_CONFIRM)
             {
                 break;
             }
+            key.assign(textBuf, sizeof(textBuf));
         }
         if (titleId.length() == 16 && key.length() == 32)
         {
@@ -923,7 +892,8 @@ void action_about()
     printf("latest games has never been so easy.\n\n");
 
     printf("Contributors: Cearp, Drakia, superbudvar,\n");
-    printf("              mysamdog, cerea1killer\n");
+    printf("              mysamdog, cerea1killer,\n");
+    printf("              DanTheMan827\n");
 
     printf("\n\nCommit: " REVISION_STRING "\n\n");
 
