@@ -322,7 +322,7 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
     ret = httpcBeginRequest(&context);
     if (ret != 0) goto _out;
 
-    ret = httpcGetResponseStatusCode(&context, &status, 0);
+    ret = httpcGetResponseStatusCode(&context, &status);
     if (ret != 0) goto _out;
 
     if (status != 200)
