@@ -648,7 +648,7 @@ bool download_JSON() {
   FILE *oh = fopen("/CIAngel/wings.json.tmp", "wb");
   
   if (oh) {
-    Result res = DownloadFile(JSON_URL, oh, false);
+    Result res = DownloadFile(getJsonUrl().c_str(), oh, false);
     int size = ftell(oh);
     fclose(oh);
     if (res == 0 && size >= 0) {
@@ -658,7 +658,8 @@ bool download_JSON() {
     }
   }
   
-  printf("Failed to download JSON");
+  remove("/CIAngel/wings.json.tmp");
+  printf("Failed to download JSON\n");
   return false;
 }
 
@@ -734,4 +735,18 @@ std::string upperCase(std::string input) {
   for (std::string::iterator it = input.begin(); it != input.end(); ++ it)
     *it = toupper(*it);
   return input;
+}
+
+std::string getJsonUrl()
+{
+	std::string sJsonUrl = JSON_URL_DEFAULT;
+
+	std::ifstream jsonFile;
+	jsonFile.open(JSON_URL_FILE, std::ofstream::in);
+	if (jsonFile.is_open())
+	{
+		getline(jsonFile, sJsonUrl);
+	}
+
+	return sJsonUrl;
 }

@@ -20,7 +20,8 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 
 #define NUS_URL "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/"
 #define SEED_URL "https://kagiya-ctr.cdn.nintendo.net/title/"
-#define JSON_URL "https://3ds.titlekeys.com/json_enc"
+#define JSON_URL_DEFAULT "http://3ds.titlekeys.gq/json_enc"
+#define JSON_URL_FILE "/CIAngel/source.txt"
 
 // Check for updates every 3 days automatically?
 #define JSON_UPDATE_INTERVAL_IN_SECONDS (60 * 60 * 24 * 3)
@@ -31,8 +32,10 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 // C++ only code
 #ifdef __cplusplus
 #include <string>
+#include <fstream>
 std::string GetSerialType(std::string sSerial);
 std::string upperCase(std::string input);
+std::string getJsonUrl();
 #endif
 
 //MISC
