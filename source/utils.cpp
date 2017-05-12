@@ -27,7 +27,7 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 #include <sys/time.h>
 
 //MISC
-void char_to_int_array(unsigned char destination[], char source[], int size, int endianness, int base)
+void char_to_int_array(unsigned char destination[], char source[], int size, u32 endianness, int base)
 {	
 	char tmp[size][2];
     unsigned char *byte_array = (unsigned char*)malloc(size*sizeof(unsigned char));
@@ -57,7 +57,7 @@ void char_to_int_array(unsigned char destination[], char source[], int size, int
 	free(byte_array);
 }
 
-void endian_memcpy(u8 *destination, u8 *source, u32 size, int endianness)
+void endian_memcpy(u8 *destination, u8 *source, u32 size, u32 endianness)
 { 
     for (u32 i = 0; i < size; i++){
         switch (endianness){
@@ -322,7 +322,7 @@ Result DownloadFile_Internal(const char *url, void *out, bool bProgress,
     ret = httpcBeginRequest(&context);
     if (ret != 0) goto _out;
 
-    ret = httpcGetResponseStatusCode(&context, &status, 0);
+    ret = httpcGetResponseStatusCode(&context, &status);
     if (ret != 0) goto _out;
 
     if (status != 200)
@@ -428,7 +428,7 @@ Result InstallSeed(u64 titleId, const void* seed) {
 }
 
 //Data Size conversion
-u16 u8_to_u16(u8 *value, u8 endianness)
+u16 u8_to_u16(u8 *value, u32 endianness)
 {
 	u16 new_value = 0;
 	switch(endianness){
@@ -438,7 +438,7 @@ u16 u8_to_u16(u8 *value, u8 endianness)
 	return new_value;
 }
 
-u32 u8_to_u32(u8 *value, u8 endianness)
+u32 u8_to_u32(u8 *value, u32 endianness)
 {
 	u32 new_value = 0;
 	switch(endianness){
@@ -449,7 +449,7 @@ u32 u8_to_u32(u8 *value, u8 endianness)
 }
 
 
-u64 u8_to_u64(u8 *value, u8 endianness)
+u64 u8_to_u64(u8 *value, u32 endianness)
 {
 	u64 u64_return = 0;
 	switch(endianness){
@@ -479,7 +479,7 @@ u64 u8_to_u64(u8 *value, u8 endianness)
 	return u64_return;
 }
 
-int u16_to_u8(u8 *out_value, u16 in_value, u8 endianness)
+int u16_to_u8(u8 *out_value, u16 in_value, u32 endianness)
 {
 	switch(endianness){
 		case(BIG_ENDIAN):
@@ -494,7 +494,7 @@ int u16_to_u8(u8 *out_value, u16 in_value, u8 endianness)
 	return 0;
 }
 
-int u32_to_u8(u8 *out_value, u32 in_value, u8 endianness)
+int u32_to_u8(u8 *out_value, u32 in_value, u32 endianness)
 {
 	switch(endianness){
 		case(BIG_ENDIAN):
@@ -513,7 +513,7 @@ int u32_to_u8(u8 *out_value, u32 in_value, u8 endianness)
 	return 0;
 }
 
-int u64_to_u8(u8 *out_value, u64 in_value, u8 endianness)
+int u64_to_u8(u8 *out_value, u64 in_value, u32 endianness)
 {
 	switch(endianness){
 		case(BIG_ENDIAN):
@@ -648,7 +648,7 @@ bool download_JSON() {
   FILE *oh = fopen("/CIAngel/wings.json.tmp", "wb");
   
   if (oh) {
-    Result res = DownloadFile(JSON_URL, oh, false);
+    Result res = DownloadFile(getJsonUrl().c_str(), oh, false);
     int size = ftell(oh);
     fclose(oh);
     if (res == 0 && size >= 0) {
@@ -658,7 +658,8 @@ bool download_JSON() {
     }
   }
   
-  printf("Failed to download JSON");
+  remove("/CIAngel/wings.json.tmp");
+  printf("Failed to download JSON\n");
   return false;
 }
 
@@ -734,4 +735,18 @@ std::string upperCase(std::string input) {
   for (std::string::iterator it = input.begin(); it != input.end(); ++ it)
     *it = toupper(*it);
   return input;
+}
+
+std::string getJsonUrl()
+{
+	std::string sJsonUrl = JSON_URL_DEFAULT;
+
+	std::ifstream jsonFile;
+	jsonFile.open(JSON_URL_FILE, std::ofstream::in);
+	if (jsonFile.is_open())
+	{
+		getline(jsonFile, sJsonUrl);
+	}
+
+	return sJsonUrl;
 }

@@ -20,7 +20,8 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 
 #define NUS_URL "http://ccs.cdn.c.shop.nintendowifi.net/ccs/download/"
 #define SEED_URL "https://kagiya-ctr.cdn.nintendo.net/title/"
-#define JSON_URL "https://3ds.titlekeys.com/json_enc"
+#define JSON_URL_DEFAULT "http://3ds.titlekeys.gq/json_enc"
+#define JSON_URL_FILE "/CIAngel/source.txt"
 
 // Check for updates every 3 days automatically?
 #define JSON_UPDATE_INTERVAL_IN_SECONDS (60 * 60 * 24 * 3)
@@ -31,16 +32,18 @@ along with make_cdn_cia.  If not, see <http://www.gnu.org/licenses/>.
 // C++ only code
 #ifdef __cplusplus
 #include <string>
+#include <fstream>
 std::string GetSerialType(std::string sSerial);
 std::string upperCase(std::string input);
+std::string getJsonUrl();
 #endif
 
 //MISC
 #ifdef __cplusplus
 extern "C" {
 #endif
-void char_to_int_array(unsigned char destination[], char source[], int size, int endianness, int base);
-void endian_memcpy(u8 *destination, u8 *source, u32 size, int endianness);
+void char_to_int_array(unsigned char destination[], char source[], int size, u32 endianness, int base);
+void endian_memcpy(u8 *destination, u8 *source, u32 size, u32 endianness);
 void u8_hex_print_be(u8 *array, int len);
 void u8_hex_print_le(u8 *array, int len);
 u32 align_value(u32 value, u32 alignment);
@@ -62,12 +65,12 @@ Result DownloadFile(const char *url, FILE *os, bool bProgress);
 Result DownloadFileInstall(const char *url, Handle *handle, u32* offset);
 Result InstallSeed(u64 titleId, const void* seed);
 //Data Size conversion
-u16 u8_to_u16(u8 *value, u8 endianness);
-u32 u8_to_u32(u8 *value, u8 endianness);
-u64 u8_to_u64(u8 *value, u8 endianness);
-int u16_to_u8(u8 *out_value, u16 in_value, u8 endianness);
-int u32_to_u8(u8 *out_value, u32 in_value, u8 endianness);
-int u64_to_u8(u8 *out_value, u64 in_value, u8 endianness);
+u16 u8_to_u16(u8 *value, u32 endianness);
+u32 u8_to_u32(u8 *value, u32 endianness);
+u64 u8_to_u64(u8 *value, u32 endianness);
+int u16_to_u8(u8 *out_value, u16 in_value, u32 endianness);
+int u32_to_u8(u8 *out_value, u32 in_value, u32 endianness);
+int u64_to_u8(u8 *out_value, u64 in_value, u32 endianness);
 //from ctrtool
 void memdump(FILE* fout, const char* prefix, const u8* data, u32 size);
 // HID related
