@@ -17,7 +17,7 @@ This will be improved, updated, I look forward to people contributing to this pr
 
 # Latest Version
 You can scan the following QRCode in FBI to install the latest version of CIAngel, this will always point at the latest release's CIAngel.cia file:  
-![CIAngel.cia](https://thedgtl.net/3ds/CIAngel.php?cachebust=1)
+![CIAngel.cia](https://thedgtl.net/3ds/CIAngel.php?cachebust=2)
 
 # Usage
 ## Search by name
