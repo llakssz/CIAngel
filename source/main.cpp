@@ -297,7 +297,7 @@ Result DownloadTitle(std::string titleId, std::string encTitleKey, std::string t
                 httpcSetSSLOpt(&context, SSLCOPT_DisableVerify);
 
                 u32 responseCode = 0;
-                if(R_SUCCEEDED(res = httpcBeginRequest(&context)) && R_SUCCEEDED(res = httpcGetResponseStatusCode(&context, &responseCode, 0))) {
+                if(R_SUCCEEDED(res = httpcBeginRequest(&context)) && R_SUCCEEDED(res = httpcGetResponseStatusCode(&context, &responseCode))) {
                     if(responseCode == 200) {
                         u32 pos = 0;
                         u32 bytesRead = 0;

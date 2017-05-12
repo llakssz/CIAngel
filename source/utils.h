@@ -39,8 +39,8 @@ std::string upperCase(std::string input);
 #ifdef __cplusplus
 extern "C" {
 #endif
-void char_to_int_array(unsigned char destination[], char source[], int size, int endianness, int base);
-void endian_memcpy(u8 *destination, u8 *source, u32 size, int endianness);
+void char_to_int_array(unsigned char destination[], char source[], int size, u32 endianness, int base);
+void endian_memcpy(u8 *destination, u8 *source, u32 size, u32 endianness);
 void u8_hex_print_be(u8 *array, int len);
 void u8_hex_print_le(u8 *array, int len);
 u32 align_value(u32 value, u32 alignment);
@@ -62,12 +62,12 @@ Result DownloadFile(const char *url, FILE *os, bool bProgress);
 Result DownloadFileInstall(const char *url, Handle *handle, u32* offset);
 Result InstallSeed(u64 titleId, const void* seed);
 //Data Size conversion
-u16 u8_to_u16(u8 *value, u8 endianness);
-u32 u8_to_u32(u8 *value, u8 endianness);
-u64 u8_to_u64(u8 *value, u8 endianness);
-int u16_to_u8(u8 *out_value, u16 in_value, u8 endianness);
-int u32_to_u8(u8 *out_value, u32 in_value, u8 endianness);
-int u64_to_u8(u8 *out_value, u64 in_value, u8 endianness);
+u16 u8_to_u16(u8 *value, u32 endianness);
+u32 u8_to_u32(u8 *value, u32 endianness);
+u64 u8_to_u64(u8 *value, u32 endianness);
+int u16_to_u8(u8 *out_value, u16 in_value, u32 endianness);
+int u32_to_u8(u8 *out_value, u32 in_value, u32 endianness);
+int u64_to_u8(u8 *out_value, u64 in_value, u32 endianness);
 //from ctrtool
 void memdump(FILE* fout, const char* prefix, const u8* data, u32 size);
 // HID related

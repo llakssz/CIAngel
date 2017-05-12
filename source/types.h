@@ -41,8 +41,6 @@ typedef enum
 
 typedef enum
 {
-	BIG_ENDIAN = 0,
-	LITTLE_ENDIAN = 1,
 	BE = 0,
 	LE = 1
 } endianness_flag;

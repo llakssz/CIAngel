@@ -45,7 +45,7 @@ int install_cia(TMD_CONTEXT tmd_context, TIK_CONTEXT tik_context)
 	FS_MediaType dest = ((titleId >> 32) & 0x8010) != 0 ? MEDIATYPE_NAND : MEDIATYPE_SD;
 
 	// Make sure this isn't a N3DS only title being installed on an O3DS
-	u8 n3ds = false;
+	bool n3ds = false;
 	if(R_SUCCEEDED(APT_CheckNew3DS(&n3ds)) && !n3ds)
 	{
 		// 28 bits shift = 2 is a system title for N3ds

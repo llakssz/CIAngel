@@ -20,7 +20,6 @@ u32 __ctr_svchax = 0;
 u32 __ctr_svchax_srv = 0;
 
 extern void* __service_ptr;
-extern Handle gspEvents[GSPGPU_EVENT_MAX];
 
 typedef u32(*backdoor_fn)(u32 arg0, u32 arg1);
 
@@ -109,7 +108,7 @@ typedef struct
 typedef struct
 {
    u32 old_cpu_time_limit;
-   u8 isNew3DS;
+   bool isNew3DS;
    u32 kernel_fcram_mapping_offset;
 
    Handle arbiter;
@@ -213,11 +212,9 @@ static void do_memchunkhax2(void)
    for (i = 0; i < MCH2_THREAD_COUNT_MAX; i++)
       mch2.threads[i].stack_top = (u32*)((u32)thread_stacks + (i + 1) * (MCH2_THREAD_STACKS_SIZE / MCH2_THREAD_COUNT_MAX));
 
-   aptOpenSession();
    APT_CheckNew3DS(&mch2.isNew3DS);
    APT_GetAppCpuTimeLimit(&mch2.old_cpu_time_limit);
    APT_SetAppCpuTimeLimit(5);
-   aptCloseSession();
 
    for (i = 0; i < mch2.threads_limit; i++)
    {
@@ -247,7 +244,8 @@ static void do_memchunkhax2(void)
          svcCloseHandle(mch2.threads[i].handle);
          mch2.threads[i].handle = 0;
       }
-
+      
+   svcSleepThread(40000000LL);
    svcCloseHandle(mch2.dummy_threads_lock);
 
    u32 fragmented_address = 0;
@@ -296,7 +294,6 @@ static void do_memchunkhax2(void)
    GSPGPU_InvalidateDataCache((void*)dst_memchunk, 16);
    GSPGPU_FlushDataCache((void*)linear_buffer, 16);
    memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
-   svcClearEvent(gspEvents[GSPGPU_EVENT_PPF]);
 
    svcCreateThread(&mch2.alloc_thread, (ThreadFunc)alloc_thread_entry, (u32)&mch2,
                    mch2.threads[MCH2_THREAD_COUNT_MAX - 1].stack_top, 0x3F, 1);
@@ -306,7 +303,7 @@ static void do_memchunkhax2(void)
 
    GX_TextureCopy((void*)linear_buffer, 0, (void*)dst_memchunk, 0, 16, 8);
    memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
-   svcWaitSynchronization(gspEvents[GSPGPU_EVENT_PPF], U64_MAX);
+   gspWaitForPPF();
 
    svcWaitSynchronization(mch2.alloc_thread, U64_MAX);
    svcCloseHandle(mch2.alloc_thread);
@@ -374,24 +371,19 @@ static void do_memchunkhax2(void)
 
    svcControlMemory(&tmp, linear_buffer, 0, 0x1000, MEMOP_FREE, MEMPERM_DONTCARE);
 
-   aptOpenSession();
    APT_SetAppCpuTimeLimit(mch2.old_cpu_time_limit);
-   aptCloseSession();
 }
 
 
 static void gspwn(u32 dst, u32 src, u32 size, u8* flush_buffer)
 {
-   extern Handle gspEvents[GSPGPU_EVENT_MAX];
-
    memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
    GSPGPU_InvalidateDataCache((void*)dst, size);
    GSPGPU_FlushDataCache((void*)src, size);
    memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
 
-   svcClearEvent(gspEvents[GSPGPU_EVENT_PPF]);
    GX_TextureCopy((void*)src, 0, (void*)dst, 0, size, 8);
-   svcWaitSynchronization(gspEvents[GSPGPU_EVENT_PPF], U64_MAX);
+   gspWaitForPPF();
 
    memcpy(flush_buffer, flush_buffer + 0x4000, 0x4000);
 }
@@ -468,10 +460,8 @@ static void do_memchunkhax1(void)
 
 Result svchax_init(bool patch_srv)
 {
-   u8 isNew3DS;
-   aptOpenSession();
+   bool isNew3DS;
    APT_CheckNew3DS(&isNew3DS);
-   aptCloseSession();
 
    u32 kver = osGetKernelVersion();
 
