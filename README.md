@@ -1,5 +1,7 @@
 # CIAngel
 
+# Archived, CDN access is not available anymore. RIP.
+
 
 Now we can get games directly on the 3DS!
 Using a Title ID and an encrypted title key, or searching for a title by name, GOOD CIAs will be produced or directly installed that can be redownloaded from eshop and updated from eshop if new content comes out. These CIAs will not interfere with content from eshop.
